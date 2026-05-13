@@ -1,0 +1,731 @@
+# Full provider/profile template for tb2-codex-shim-bench.
+#
+# All model entries are commented out by default. Uncomment the entries you want
+# to include in a run. Keep ports unique across uncommented entries.
+#
+# Boolean `capabilities` below mirror the current codex-shim preset values for
+# each profile. Protocol/state policy fields are comments only because changing
+# them can invalidate the provider adapter semantics.
+
+defaults:
+  codex_shim_bin: ${CODEX_SHIM_BIN:-codex-shim}
+  listen_host: 0.0.0.0
+  docker_host: host.docker.internal
+  harbor_bin: harbor
+  harbor_dataset: terminal-bench@2.0
+  harbor_jobs_dir: runs
+  harbor_n_attempts: 1
+  harbor_n_concurrent: 1
+  reasoning_enabled: true
+  reasoning_effort: xhigh
+  context_window: 1000000
+  state_backend: memory
+  logging_level: info
+  tasks:
+    - regex-log
+
+models:
+  ## DeepSeek Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: deepseek_reasoning_content
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: deepseek_v4_pro
+  #   provider_profile: deepseek-chat
+  #   model_slug: deepseek-v4-pro
+  #   api_key_env: DEEPSEEK_API_KEY
+  #   port: 8877
+  #   upstream_base_url: https://api.deepseek.com
+  #   reasoning_levels: [xhigh, high]
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: true
+  #     reliable_stream_usage_for_compaction: true
+
+  ## MiniMax Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: generic_reasoning_content
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: minimax_m27
+  #   provider_profile: minimax-chat
+  #   model_slug: MiniMax-M2.7
+  #   api_key_env: MINIMAX_API_KEY
+  #   port: 8878
+  #   upstream_base_url: https://api.minimax.chat/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: false
+  #     request_stream_usage: false
+  #     reliable_stream_usage_for_compaction: false
+
+  ## Moonshot / Kimi Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: generic_reasoning_content
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: moonshot_kimi_k26
+  #   provider_profile: moonshot-chat
+  #   model_slug: kimi-k2.6
+  #   api_key_env: MOONSHOT_API_KEY
+  #   port: 8879
+  #   upstream_base_url: https://api.moonshot.cn/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: true
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: false
+  #     request_stream_usage: true
+  #     reliable_stream_usage_for_compaction: false
+
+  ## Z.AI / GLM Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: generic_reasoning_content
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: zai_glm_51
+  #   provider_profile: zai-chat
+  #   model_slug: glm-5.1
+  #   api_key_env: ZAI_API_KEY
+  #   port: 8880
+  #   upstream_base_url: https://api.z.ai/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: false
+  #     request_stream_usage: false
+  #     reliable_stream_usage_for_compaction: false
+
+  ## Gemini AI Studio Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: generic_reasoning_content
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: gemini_3_flash_preview
+  #   provider_profile: gemini-chat
+  #   model_slug: gemini-3-flash-preview
+  #   api_key_env: GEMINI_API_KEY
+  #   port: 8881
+  #   upstream_base_url: https://generativelanguage.googleapis.com/v1beta/openai
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: true
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: true
+  #     reliable_stream_usage_for_compaction: false
+
+  ## Vertex AI OpenAI-Compatible Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: generic_reasoning_content
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: vertex_gemini_25_flash
+  #   provider_profile: vertex-chat
+  #   model_slug: gemini-2.5-flash
+  #   api_key_env: GOOGLE_API_KEY
+  #   port: 8882
+  #   upstream_base_url: https://aiplatform.googleapis.com/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: true
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: false
+  #     reliable_stream_usage_for_compaction: false
+
+  ## Alibaba / Qwen Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: qwen_enable_thinking
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: alibaba_qwen_chat
+  #   provider_profile: alibaba-chat
+  #   model_slug: qwen3.6-plus
+  #   api_key_env: DASHSCOPE_API_KEY
+  #   port: 8883
+  #   upstream_base_url: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+  #   reasoning_levels: [xhigh, high]
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: true
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: true
+  #     reliable_stream_usage_for_compaction: false
+
+  ## Alibaba / Qwen Native Responses
+  ## endpoint_mode: native_responses
+  ## reasoning_policy: qwen_enable_thinking
+  ## tool_policy: native_responses_tools
+  ## state_policy: upstream_previous_response_id
+  # - id: alibaba_qwen_responses
+  #   provider_profile: alibaba-responses
+  #   model_slug: qwen3.6-plus
+  #   api_key_env: DASHSCOPE_API_KEY
+  #   port: 8884
+  #   upstream_base_url: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+  #   reasoning_levels: [xhigh, high]
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: true
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: true
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: true
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: false
+  #     reliable_stream_usage_for_compaction: false
+
+  ## Fireworks Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: generic_reasoning_content
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: fireworks_qwen_chat
+  #   provider_profile: fireworks-chat
+  #   model_slug: accounts/fireworks/models/qwen3-235b-a22b
+  #   api_key_env: FIREWORKS_API_KEY
+  #   port: 8885
+  #   upstream_base_url: https://api.fireworks.ai/inference/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: false
+  #     request_stream_usage: true
+  #     reliable_stream_usage_for_compaction: false
+
+  ## Fireworks Native Responses
+  ## endpoint_mode: native_responses
+  ## reasoning_policy: openai_responses_reasoning_item
+  ## tool_policy: native_responses_tools
+  ## state_policy: upstream_previous_response_id
+  # - id: fireworks_qwen_responses
+  #   provider_profile: fireworks-responses
+  #   model_slug: accounts/fireworks/models/qwen3-235b-a22b
+  #   api_key_env: FIREWORKS_API_KEY
+  #   port: 8886
+  #   upstream_base_url: https://api.fireworks.ai/inference/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: true
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: true
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: false
+  #     reliable_stream_usage_for_compaction: false
+
+  ## xAI Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: generic_reasoning_content
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: xai_grok_chat
+  #   provider_profile: xai-chat
+  #   model_slug: grok-4.20-reasoning
+  #   api_key_env: XAI_API_KEY
+  #   port: 8887
+  #   upstream_base_url: https://api.x.ai/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: true
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: true
+  #     reliable_stream_usage_for_compaction: false
+
+  ## xAI Native Responses
+  ## endpoint_mode: native_responses
+  ## reasoning_policy: openai_responses_reasoning_item
+  ## tool_policy: native_responses_tools
+  ## state_policy: upstream_previous_response_id
+  # - id: xai_grok_responses
+  #   provider_profile: xai-responses
+  #   model_slug: grok-4.20-reasoning
+  #   api_key_env: XAI_API_KEY
+  #   port: 8888
+  #   upstream_base_url: https://api.x.ai/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: true
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: true
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: false
+  #     reliable_stream_usage_for_compaction: false
+
+  ## Amazon Bedrock Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: generic_reasoning_content
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: bedrock_nova_chat
+  #   provider_profile: bedrock-chat
+  #   model_slug: amazon.nova-pro-v1:0
+  #   api_key_env: AWS_ACCESS_KEY_ID
+  #   port: 8889
+  #   upstream_base_url: https://bedrock-runtime.us-east-1.amazonaws.com
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: false
+  #     reliable_stream_usage_for_compaction: false
+
+  ## Amazon Bedrock Native Responses
+  ## endpoint_mode: native_responses
+  ## reasoning_policy: openai_responses_reasoning_item
+  ## tool_policy: native_responses_tools
+  ## state_policy: upstream_previous_response_id
+  # - id: bedrock_nova_responses
+  #   provider_profile: bedrock-responses
+  #   model_slug: amazon.nova-pro-v1:0
+  #   api_key_env: AWS_ACCESS_KEY_ID
+  #   port: 8890
+  #   upstream_base_url: https://bedrock-runtime.us-east-1.amazonaws.com
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: true
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: true
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: false
+  #     reliable_stream_usage_for_compaction: false
+
+  ## OpenRouter Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: openrouter_reasoning_details
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: openrouter_kimi_chat
+  #   provider_profile: openrouter-chat
+  #   model_slug: moonshotai/kimi-k2.6
+  #   api_key_env: OPENROUTER_API_KEY
+  #   port: 8891
+  #   upstream_base_url: https://openrouter.ai/api/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: true
+  #     reliable_stream_usage_for_compaction: false
+
+  ## OpenRouter Stateless Responses
+  ## endpoint_mode: stateless_responses
+  ## reasoning_policy: openrouter_reasoning_details
+  ## tool_policy: native_responses_tools
+  ## state_policy: upstream_stateless_full_history
+  # - id: openrouter_kimi_responses
+  #   provider_profile: openrouter-responses
+  #   model_slug: moonshotai/kimi-k2.6
+  #   api_key_env: OPENROUTER_API_KEY
+  #   port: 8892
+  #   upstream_base_url: https://openrouter.ai/api/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: true
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: false
+  #     reliable_stream_usage_for_compaction: false
+
+  ## Groq Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: generic_reasoning_content
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: groq_llama_chat
+  #   provider_profile: groq-chat
+  #   model_slug: llama-3.3-70b-versatile
+  #   api_key_env: GROQ_API_KEY
+  #   port: 8893
+  #   upstream_base_url: https://api.groq.com/openai/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: false
+  #     reliable_stream_usage_for_compaction: false
+
+  ## Groq Stateless Responses
+  ## endpoint_mode: stateless_responses
+  ## reasoning_policy: openai_responses_reasoning_item
+  ## tool_policy: native_responses_tools
+  ## state_policy: upstream_stateless_full_history
+  # - id: groq_llama_responses
+  #   provider_profile: groq-responses
+  #   model_slug: llama-3.3-70b-versatile
+  #   api_key_env: GROQ_API_KEY
+  #   port: 8894
+  #   upstream_base_url: https://api.groq.com/openai/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: false
+  #     reliable_stream_usage_for_compaction: false
+
+  ## Together AI Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: generic_reasoning_content
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: together_llama_chat
+  #   provider_profile: together-chat
+  #   model_slug: meta-llama/Llama-3.3-70B-Instruct-Turbo
+  #   api_key_env: TOGETHER_API_KEY
+  #   port: 8895
+  #   upstream_base_url: https://api.together.xyz/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: false
+  #     request_stream_usage: false
+  #     reliable_stream_usage_for_compaction: false
+
+  ## Ollama Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: generic_reasoning_content
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: ollama_qwen_chat
+  #   provider_profile: ollama-chat
+  #   model_slug: qwen3.5:32b
+  #   api_key_env: OLLAMA_API_KEY
+  #   port: 8896
+  #   upstream_base_url: http://127.0.0.1:11434/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: false
+  #     request_stream_usage: true
+  #     reliable_stream_usage_for_compaction: false
+
+  ## Ollama Stateless Responses
+  ## endpoint_mode: stateless_responses
+  ## reasoning_policy: openai_responses_reasoning_item
+  ## tool_policy: function_tools_only
+  ## state_policy: upstream_stateless_full_history
+  # - id: ollama_qwen_responses
+  #   provider_profile: ollama-responses
+  #   model_slug: qwen3.5:32b
+  #   api_key_env: OLLAMA_API_KEY
+  #   port: 8897
+  #   upstream_base_url: http://127.0.0.1:11434/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: false
+  #     reliable_stream_usage_for_compaction: false
+
+  ## llama.cpp Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: generic_reasoning_content
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: llamacpp_local_chat
+  #   provider_profile: llamacpp-chat
+  #   model_slug: local-model
+  #   api_key_env: LLAMACPP_API_KEY
+  #   port: 8898
+  #   upstream_base_url: http://127.0.0.1:8080/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: false
+  #     request_stream_usage: true
+  #     reliable_stream_usage_for_compaction: false
+
+  ## llama.cpp Stateless Responses
+  ## endpoint_mode: stateless_responses
+  ## reasoning_policy: openai_responses_reasoning_item
+  ## tool_policy: function_tools_only
+  ## state_policy: upstream_stateless_full_history
+  # - id: llamacpp_local_responses
+  #   provider_profile: llamacpp-responses
+  #   model_slug: local-model
+  #   api_key_env: LLAMACPP_API_KEY
+  #   port: 8899
+  #   upstream_base_url: http://127.0.0.1:8080/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: false
+  #     request_stream_usage: false
+  #     reliable_stream_usage_for_compaction: false
+
+  ## vLLM Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: generic_reasoning_content
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: vllm_local_chat
+  #   provider_profile: vllm-chat
+  #   model_slug: your-vllm-model
+  #   api_key_env: VLLM_API_KEY
+  #   port: 8900
+  #   upstream_base_url: http://127.0.0.1:8000/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: true
+  #     reliable_stream_usage_for_compaction: false
+
+  ## vLLM Native Responses
+  ## endpoint_mode: native_responses
+  ## reasoning_policy: openai_responses_reasoning_item
+  ## tool_policy: native_responses_tools
+  ## state_policy: adapter_stateful
+  # - id: vllm_local_responses
+  #   provider_profile: vllm-responses
+  #   model_slug: your-vllm-model
+  #   api_key_env: VLLM_API_KEY
+  #   port: 8901
+  #   upstream_base_url: http://127.0.0.1:8000/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: true
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: false
+  #     reliable_stream_usage_for_compaction: false
+
+  ## SGLang Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: sglang_reasoning_content
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: sglang_local_chat
+  #   provider_profile: sglang-chat
+  #   model_slug: local-model
+  #   api_key_env: SGLANG_API_KEY
+  #   port: 8902
+  #   upstream_base_url: http://127.0.0.1:30000/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: true
+  #     request_stream_usage: true
+  #     reliable_stream_usage_for_compaction: false
+
+  ## Generic OpenAI-Compatible Chat
+  ## endpoint_mode: chat_completions_shim
+  ## reasoning_policy: generic_reasoning_content
+  ## tool_policy: function_tools_only
+  ## state_policy: adapter_stateful
+  # - id: generic_openai_chat
+  #   provider_profile: generic-chat
+  #   model_slug: model-slug
+  #   api_key_env: OPENAI_API_KEY
+  #   port: 8903
+  #   upstream_base_url: https://example.com/v1
+  #   capabilities:
+  #     supports_function_tools: true
+  #     supports_parallel_tool_calls: true
+  #     supports_structured_outputs: true
+  #     supports_json_object: true
+  #     supports_json_schema: false
+  #     supports_vision_input: false
+  #     supports_hosted_web_search: false
+  #     supports_hosted_file_search: false
+  #     supports_code_interpreter: false
+  #     supports_previous_response_id: false
+  #     supports_reasoning_effort: false
+  #     request_stream_usage: true
+  #     reliable_stream_usage_for_compaction: false

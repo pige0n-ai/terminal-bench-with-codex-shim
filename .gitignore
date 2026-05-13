@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+.pytest_cache/
+runs/
+generated/
+*.pyc
+*.log
+*.egg-info/
+matrix.yaml

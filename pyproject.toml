@@ -1,0 +1,25 @@
+[project]
+name = "tb2-codex-shim-bench"
+version = "0.1.0"
+description = "Run Terminal-Bench 2.0 provider/model matrices through Codex CLI and codex-shim."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "PyYAML>=6.0.1",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+tb2-codex-shim-bench = "tb2_codex_shim_bench.cli:main"
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
