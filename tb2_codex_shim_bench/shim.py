@@ -137,6 +137,16 @@ def build_runtime(defaults: Defaults, model: ModelEntry, run_dir: Path) -> ShimR
     )
 
 
+
+def fetch_model_catalog_json(runtime: ShimRuntime, timeout_sec: int = 10) -> str:
+    url = f"http://127.0.0.1:{runtime.model.port}/v1/models"
+    with urllib.request.urlopen(url, timeout=timeout_sec) as resp:
+        raw = resp.read().decode("utf-8")
+    parsed = json.loads(raw)
+    if not parsed:
+        raise RuntimeError(f"empty model catalog from {url}")
+    return json.dumps(parsed, separators=(",", ":"))
+
 def start_shim(defaults: Defaults, runtime: ShimRuntime, timeout_sec: int = 30) -> ShimProcess:
     ensure_health_absent(runtime.health_url)
     runtime.log_path.parent.mkdir(parents=True, exist_ok=True)

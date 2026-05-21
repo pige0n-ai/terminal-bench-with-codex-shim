@@ -22,6 +22,7 @@ class ShimmedCodex(Codex):
         codex_model_provider: str = "codex_shim",
         context_window: int = 1_000_000,
         reasoning_effort: str = "xhigh",
+        model_catalog_json: str = "",
         codex_cli_version: str = "0.131.0",
         node_version: str = "22",
         nvm_version: str = "0.40.2",
@@ -34,6 +35,7 @@ class ShimmedCodex(Codex):
         self.codex_model_provider = codex_model_provider
         self.context_window = context_window
         self.reasoning_effort = reasoning_effort
+        self.model_catalog_json = _required_text(model_catalog_json, "model_catalog_json")
         self.codex_cli_version = _required_text(codex_cli_version, "codex_cli_version")
         self.node_version = _required_text(node_version, "node_version")
         self.nvm_version = _required_text(nvm_version, "nvm_version")
@@ -134,8 +136,6 @@ supports_websockets = false
         remote_secrets_dir = self._REMOTE_CODEX_SECRETS_DIR.as_posix()
         output_path = EnvironmentPaths.agent_dir / self._OUTPUT_FILENAME
 
-        models_url = f"{self.codex_shim_base_url}/models"
-        health_url = self._health_url()
         agent_dir = EnvironmentPaths.agent_dir.as_posix()
 
         env: dict[str, str] = {
@@ -149,8 +149,7 @@ supports_websockets = false
                 config_toml=self._config_toml(model),
                 remote_secrets_dir=remote_secrets_dir,
                 agent_dir=agent_dir,
-                health_url=health_url,
-                models_url=models_url,
+                model_catalog_json=self.model_catalog_json,
             ),
             env=env,
         )

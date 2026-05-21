@@ -60,14 +60,11 @@ def run_setup(tmp_path: Path, *, models_body: str | None = None) -> subprocess.C
         config_toml='model = "deepseek-v4-flash"\n',
         remote_secrets_dir=str(tmp_path / "secrets"),
         agent_dir=str(agent_dir),
-        health_url="http://127.0.0.1:8878/healthz",
-        models_url="http://127.0.0.1:8878/v1/models",
+        model_catalog_json=(models_body if models_body is not None else '{"models":[{"slug":"deepseek-v4-flash"}]}'),
     )
     env = os.environ.copy()
     env["CODEX_HOME"] = str(code_home)
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
-    if models_body is not None:
-        env["FAKE_MODELS_BODY"] = models_body
     return subprocess.run(
         ["bash", "-lc", command],
         env=env,
@@ -83,11 +80,51 @@ def test_setup_command_atomically_writes_valid_catalog_and_artifacts(tmp_path: P
     assert result.returncode == 0, result.stderr
     agent_dir = tmp_path / "agent"
     assert (agent_dir / "config.toml").read_text() == 'model = "deepseek-v4-flash"\n'
-    assert (agent_dir / "model-catalog-shim.json").read_text() == '{"models":[{"slug":"deepseek-v4-flash"}]}'
+    assert (agent_dir / "model-catalog-shim.json").read_text() == '{"models":[{"slug":"deepseek-v4-flash"}]}\n'
     assert (agent_dir / "codex-version.txt").read_text() == "codex-cli 0.131.0\n"
     assert (agent_dir / "codex-features.txt").read_text() == "unified_exec stable\n"
     assert not list((tmp_path / "codex-home").glob("model-catalog-shim.json.tmp.*"))
 
+
+
+def test_setup_command_loads_nvm_for_node_and_codex(tmp_path: Path):
+    code_home = tmp_path / "codex-home"
+    agent_dir = tmp_path / "agent"
+    bin_dir = fake_bin_dir(tmp_path)
+    nvm_bin = tmp_path / "nvm-bin"
+    nvm_bin.mkdir()
+    (nvm_bin / "node").write_text((bin_dir / "node").read_text())
+    (nvm_bin / "codex").write_text((bin_dir / "codex").read_text())
+    (nvm_bin / "node").chmod(0o755)
+    (nvm_bin / "codex").chmod(0o755)
+
+    nvm_dir = tmp_path / ".nvm"
+    nvm_dir.mkdir()
+    (nvm_dir / "nvm.sh").write_text(f'export PATH="{nvm_bin}:$PATH"\n')
+
+    command = setup_command(
+        config_toml='model = "deepseek-v4-flash"\n',
+        remote_secrets_dir=str(tmp_path / "secrets"),
+        agent_dir=str(agent_dir),
+        model_catalog_json='{"models":[{"slug":"deepseek-v4-flash"}]}',
+    )
+    env = os.environ.copy()
+    env["CODEX_HOME"] = str(code_home)
+    env["HOME"] = str(tmp_path)
+    env["PATH"] = f"{bin_dir}:{env['PATH']}"
+    (bin_dir / "node").unlink()
+    (bin_dir / "codex").unlink()
+
+    result = subprocess.run(
+        ["bash", "-lc", command],
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (agent_dir / "codex-version.txt").read_text() == "codex-cli 0.131.0\n"
 
 def test_setup_command_rejects_empty_catalog_without_clobbering_previous_catalog(tmp_path: Path):
     code_home = tmp_path / "codex-home"

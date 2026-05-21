@@ -8,28 +8,25 @@ def setup_command(
     config_toml: str,
     remote_secrets_dir: str,
     agent_dir: str,
-    health_url: str,
-    models_url: str,
+    model_catalog_json: str,
 ) -> str:
     catalog_file = "$CODEX_HOME/model-catalog-shim.json"
     return (
         "set -euo pipefail\n"
         f'mkdir -p "$CODEX_HOME" {shlex.quote(remote_secrets_dir)} {shlex.quote(agent_dir)}\n'
+        # Harbor runs this command in a fresh non-interactive shell. On glibc
+        # images, Codex and Node are installed through nvm during agent install,
+        # so setup must load nvm again before validating the catalog or probing
+        # Codex features.
+        'if [ -s "$HOME/.nvm/nvm.sh" ]; then . "$HOME/.nvm/nvm.sh"; fi\n'
         "cat >\"$CODEX_HOME/config.toml\" <<'TOML'\n"
         f"{config_toml}"
         "TOML\n"
-        "health_ready=0\n"
-        "for i in $(seq 1 30); do\n"
-        f"  if curl -sS --max-time 2 {shlex.quote(health_url)} | grep -q '\"ok\"'; then\n"
-        "    health_ready=1\n"
-        "    break\n"
-        "  fi\n"
-        "  sleep 1\n"
-        "done\n"
-        "test \"$health_ready\" = 1\n"
         'catalog_tmp="$(mktemp "$CODEX_HOME/model-catalog-shim.json.tmp.XXXXXX")"\n'
         'trap \'rm -f "$catalog_tmp"\' EXIT\n'
-        f"curl -fsS --max-time 10 --retry 5 --retry-delay 1 {shlex.quote(models_url)} >\"$catalog_tmp\"\n"
+        "cat >\"$catalog_tmp\" <<'JSON'\n"
+        f"{model_catalog_json}\n"
+        "JSON\n"
         "test -s \"$catalog_tmp\"\n"
         "node -e 'JSON.parse(require(\"fs\").readFileSync(process.argv[1], \"utf8\"))' \"$catalog_tmp\"\n"
         f"mv \"$catalog_tmp\" \"{catalog_file}\"\n"

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .config import load_matrix, validate_matrix
 from .harbor import run_harbor
-from .shim import build_runtime, check_docker_reaches_shim, start_shim
+from .shim import build_runtime, check_docker_reaches_shim, fetch_model_catalog_json, start_shim
 from .summary import write_summary
 
 
@@ -119,6 +119,7 @@ def _run_models(
         try:
             if not skip_docker_health:
                 check_docker_reaches_shim(matrix.defaults.docker_host, model.port)
+            model_catalog_json = fetch_model_catalog_json(runtime)
             task_groups = [[task] for task in tasks] if tasks else [[]]
             for task_group in task_groups:
                 task_suffix = f"-{_safe_slug(task_group[0])}" if task_group else "-full"
@@ -127,6 +128,7 @@ def _run_models(
                     defaults=matrix.defaults,
                     model=model,
                     codex_shim_base_url=runtime.base_url_for_codex,
+                    model_catalog_json=model_catalog_json,
                     jobs_dir=jobs_root,
                     job_name=job_name,
                     tasks=task_group,
