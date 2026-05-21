@@ -66,10 +66,20 @@ class Defaults:
     harbor_jobs_dir: Path = Path("runs")
     harbor_n_attempts: int = 1
     harbor_n_concurrent: int = 1
+    codex_cli_version: str = "0.131.0"
+    node_version: str = "22"
+    nvm_version: str = "0.40.2"
+    root_packages: list[str] = field(default_factory=lambda: ["curl", "ripgrep"])
+    alpine_packages: list[str] = field(default_factory=lambda: ["curl", "bash", "nodejs", "npm", "ripgrep"])
+    apply_patch_tool_type: str | None = "freeform"
+    apply_patch_upstream_tool_type: str | None = None
+    upstream_max_retries: int | None = None
+    upstream_stream_max_retries: int | None = None
     reasoning_enabled: bool = True
     reasoning_effort: str = "xhigh"
     context_window: int = 1_000_000
     state_backend: str = "memory"
+    state_sqlite_dir: Path | None = None
     logging_level: str = "info"
     tasks: list[str] = field(default_factory=list)
 
@@ -88,6 +98,9 @@ class ModelEntry:
     reasoning_levels: list[str] | None = None
     capabilities: dict[str, bool] | None = None
     extra_body: dict[str, Any] | None = None
+    temperature: float | None = None
+    apply_patch_tool_type: str | None = None
+    apply_patch_upstream_tool_type: str | None = None
     harbor_model_name: str | None = None
 
     def codex_model(self) -> str:
@@ -128,10 +141,24 @@ def load_matrix(path: Path) -> MatrixConfig:
         harbor_jobs_dir=_resolve_path(base, str(defaults_raw.get("harbor_jobs_dir", "runs"))),
         harbor_n_attempts=_positive_int(defaults_raw.get("harbor_n_attempts", 1), "defaults.harbor_n_attempts"),
         harbor_n_concurrent=_positive_int(defaults_raw.get("harbor_n_concurrent", 1), "defaults.harbor_n_concurrent"),
+        codex_cli_version=_required_str(defaults_raw.get("codex_cli_version", "0.131.0"), "defaults.codex_cli_version"),
+        node_version=_required_str(defaults_raw.get("node_version", "22"), "defaults.node_version"),
+        nvm_version=_required_str(defaults_raw.get("nvm_version", "0.40.2"), "defaults.nvm_version"),
+        root_packages=_string_list(defaults_raw.get("root_packages", ["curl", "ripgrep"]), "defaults.root_packages"),
+        alpine_packages=_string_list(defaults_raw.get("alpine_packages", ["curl", "bash", "nodejs", "npm", "ripgrep"]), "defaults.alpine_packages"),
+        apply_patch_tool_type=_optional_apply_patch_tool_type(defaults_raw.get("apply_patch_tool_type", "freeform"), "defaults.apply_patch_tool_type"),
+        apply_patch_upstream_tool_type=_optional_apply_patch_upstream_tool_type(defaults_raw.get("apply_patch_upstream_tool_type"), "defaults.apply_patch_upstream_tool_type"),
+        upstream_max_retries=_optional_int_range(defaults_raw.get("upstream_max_retries"), "defaults.upstream_max_retries", 0, 100),
+        upstream_stream_max_retries=_optional_int_range(defaults_raw.get("upstream_stream_max_retries"), "defaults.upstream_stream_max_retries", 0, 100),
         reasoning_enabled=bool(defaults_raw.get("reasoning_enabled", True)),
         reasoning_effort=str(defaults_raw.get("reasoning_effort", "xhigh")),
         context_window=_positive_int(defaults_raw.get("context_window", 1_000_000), "defaults.context_window"),
         state_backend=str(defaults_raw.get("state_backend", "memory")),
+        state_sqlite_dir=_optional_path(
+            base,
+            defaults_raw.get("state_sqlite_dir", "runs/shim-state"),
+            "defaults.state_sqlite_dir",
+        ),
         logging_level=str(defaults_raw.get("logging_level", "info")),
         tasks=_string_list(defaults_raw.get("tasks", []), "defaults.tasks"),
     )
@@ -183,6 +210,9 @@ def _model_entry(raw: Any, idx: int) -> ModelEntry:
         reasoning_levels=_optional_string_list(obj.get("reasoning_levels"), f"models[{idx}].reasoning_levels"),
         capabilities=_optional_bool_mapping(obj.get("capabilities"), f"models[{idx}].capabilities"),
         extra_body=obj.get("extra_body") if obj.get("extra_body") is None else _mapping(obj.get("extra_body"), f"models[{idx}].extra_body"),
+        temperature=_optional_float_range(obj.get("temperature"), f"models[{idx}].temperature", 0.0, 2.0),
+        apply_patch_tool_type=_optional_apply_patch_tool_type(obj.get("apply_patch_tool_type"), f"models[{idx}].apply_patch_tool_type"),
+        apply_patch_upstream_tool_type=_optional_apply_patch_upstream_tool_type(obj.get("apply_patch_upstream_tool_type"), f"models[{idx}].apply_patch_upstream_tool_type"),
         harbor_model_name=_optional_str(obj.get("harbor_model_name")),
     )
 
@@ -204,6 +234,12 @@ def _required(obj: dict[str, Any], key: str, name: str) -> Any:
     if key not in obj or obj[key] in (None, ""):
         raise ValueError(f"{name}.{key} is required")
     return obj[key]
+
+
+def _required_str(value: Any, name: str) -> str:
+    if value in (None, ""):
+        raise ValueError(f"{name} is required")
+    return str(value)
 
 
 def _positive_int(value: Any, name: str) -> int:
@@ -253,7 +289,59 @@ def _optional_bool_mapping(value: Any, name: str) -> dict[str, bool] | None:
     return result
 
 
+def _optional_path(base: Path, value: Any, name: str) -> Path | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be a path string")
+    if not value:
+        raise ValueError(f"{name} must not be empty")
+    return _resolve_path(base, value)
+
+
+def _optional_float_range(value: Any, name: str, minimum: float, maximum: float) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a number") from exc
+    if parsed < minimum or parsed > maximum:
+        raise ValueError(f"{name} must be between {minimum:g} and {maximum:g}")
+    return parsed
+
+
+def _optional_int_range(value: Any, name: str, minimum: int, maximum: int) -> int | None:
+    if value is None:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if parsed < minimum or parsed > maximum:
+        raise ValueError(f"{name} must be between {minimum} and {maximum}")
+    return parsed
+
+
 def _optional_str(value: Any) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _optional_apply_patch_tool_type(value: Any, name: str) -> str | None:
+    if value is None:
+        return None
+    parsed = str(value)
+    if parsed != "freeform":
+        raise ValueError(f"{name} must be 'freeform' or null")
+    return parsed
+
+
+def _optional_apply_patch_upstream_tool_type(value: Any, name: str) -> str | None:
+    if value is None:
+        return None
+    parsed = str(value)
+    if parsed not in {"freeform", "structured"}:
+        raise ValueError(f"{name} must be 'freeform', 'structured', or null")
+    return parsed

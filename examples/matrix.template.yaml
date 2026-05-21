@@ -16,10 +16,20 @@ defaults:
   harbor_jobs_dir: runs
   harbor_n_attempts: 1
   harbor_n_concurrent: 1
+  codex_cli_version: 0.131.0
+  node_version: "22"
+  nvm_version: 0.40.2
+  root_packages: [curl, ripgrep]
+  alpine_packages: [curl, bash, nodejs, npm, ripgrep]
+  apply_patch_tool_type: freeform
+  apply_patch_upstream_tool_type: structured
+  upstream_max_retries: 2
+  upstream_stream_max_retries: 2
   reasoning_enabled: true
   reasoning_effort: xhigh
   context_window: 1000000
-  state_backend: memory
+  state_backend: sqlite
+  state_sqlite_dir: runs/shim-state
   logging_level: info
   tasks:
     - regex-log

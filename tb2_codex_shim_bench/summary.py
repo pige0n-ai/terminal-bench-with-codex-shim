@@ -29,6 +29,7 @@ def summarize_run(run_dir: Path) -> dict[str, Any]:
                 "n_cache_tokens": 0,
                 "n_output_tokens": 0,
                 "cost_usd": None,
+                "failure_categories": {},
             },
         )
         bucket["n_trials"] += 1
@@ -45,6 +46,9 @@ def summarize_run(run_dir: Path) -> dict[str, Any]:
         bucket["n_output_tokens"] += trial["n_output_tokens"] or 0
         if trial["cost_usd"] is not None:
             bucket["cost_usd"] = (bucket["cost_usd"] or 0.0) + trial["cost_usd"]
+        category = trial.get("failure_category")
+        if category:
+            bucket["failure_categories"][category] = bucket["failure_categories"].get(category, 0) + 1
 
     return {
         "run_dir": str(run_dir),
@@ -80,6 +84,7 @@ def _summarize_trial(result_path: Path, data: dict[str, Any]) -> dict[str, Any]:
     else:
         status = "errored"
 
+    exception_type = exception.get("exception_type")
     return {
         "result_path": str(result_path),
         "task_name": data.get("task_name"),
@@ -87,12 +92,40 @@ def _summarize_trial(result_path: Path, data: dict[str, Any]) -> dict[str, Any]:
         "model": model_info.get("name"),
         "status": status,
         "reward": reward,
-        "exception_type": exception.get("exception_type"),
+        "exception_type": exception_type,
+        "failure_category": _failure_category(result_path, exception_type),
         "n_input_tokens": agent.get("n_input_tokens"),
         "n_cache_tokens": agent.get("n_cache_tokens"),
         "n_output_tokens": agent.get("n_output_tokens"),
         "cost_usd": agent.get("cost_usd"),
     }
+
+
+def _failure_category(result_path: Path, exception_type: str | None) -> str | None:
+    if not exception_type:
+        return None
+    trial_dir = result_path.parent
+    text_parts = []
+    for path in [trial_dir / "agent" / "codex.txt", trial_dir / "trial.log"]:
+        if path.exists():
+            text_parts.append(path.read_text(errors="replace"))
+    lowered = "\n".join(text_parts).lower()
+
+    if "model-catalog-shim.json` as json: eof" in lowered:
+        return "codex_catalog_empty"
+    if "failed to parse model_catalog_json" in lowered:
+        return "codex_catalog_invalid"
+    if "stream disconnected before completion" in lowered:
+        return "shim_stream_failed"
+    if "response.failed event received" in lowered:
+        return "shim_response_failed"
+    if "command failed" in lowered and "codex exec" not in lowered:
+        return "setup_failed"
+    if exception_type == "AgentTimeoutError":
+        return "agent_timeout"
+    if exception_type == "NonZeroAgentExitCodeError":
+        return "agent_nonzero"
+    return exception_type
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -103,6 +136,7 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "status",
         "reward",
         "exception_type",
+        "failure_category",
         "n_input_tokens",
         "n_cache_tokens",
         "n_output_tokens",

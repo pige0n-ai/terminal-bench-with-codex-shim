@@ -4,7 +4,7 @@ import pytest
 import yaml
 
 from tb2_codex_shim_bench.config import load_matrix, validate_matrix
-from tb2_codex_shim_bench.shim import render_shim_config
+from tb2_codex_shim_bench.shim import build_runtime, render_shim_config
 
 
 def write_matrix(tmp_path: Path, data: dict) -> Path:
@@ -45,11 +45,123 @@ def test_load_matrix_and_render_shim_config(tmp_path: Path):
     assert rendered["upstream"]["api_key_env"] == "DEEPSEEK_API_KEY"
     assert rendered["models"]["default"] == "deepseek-v4-pro"
     assert rendered["models"]["catalog"][0]["slug"] == "deepseek-v4-pro"
+    assert rendered["models"]["catalog"][0]["apply_patch_tool_type"] == "freeform"
     assert rendered["server"]["base_path"] == "/v1"
     assert rendered["provider"]["profile_config"]["capabilities"] == {
         "supports_reasoning_effort": True,
         "supports_json_schema": False,
     }
+    assert rendered["state"] == {"backend": "memory"}
+
+
+def test_load_matrix_reads_sqlite_state_dir(tmp_path: Path):
+    data = base_matrix()
+    data["defaults"]["state_backend"] = "sqlite"
+    data["defaults"]["state_sqlite_dir"] = "runs/custom-shim-state"
+
+    matrix = load_matrix(write_matrix(tmp_path, data))
+
+    assert matrix.defaults.state_backend == "sqlite"
+    assert matrix.defaults.state_sqlite_dir == tmp_path / "runs" / "custom-shim-state"
+
+
+def test_load_matrix_defaults_sqlite_state_dir(tmp_path: Path):
+    data = base_matrix()
+    data["defaults"]["state_backend"] = "sqlite"
+
+    matrix = load_matrix(write_matrix(tmp_path, data))
+
+    assert matrix.defaults.state_sqlite_dir == tmp_path / "runs" / "shim-state"
+
+
+def test_render_sqlite_state_config_requires_path(tmp_path: Path):
+    data = base_matrix()
+    data["defaults"]["state_backend"] = "sqlite"
+    matrix = load_matrix(write_matrix(tmp_path, data))
+
+    with pytest.raises(ValueError, match="sqlite state backend requires a sqlite_path"):
+        render_shim_config(matrix.defaults, matrix.models[0])
+
+
+def test_build_runtime_writes_sqlite_path_per_run_and_model(tmp_path: Path):
+    data = base_matrix()
+    data["defaults"]["state_backend"] = "sqlite"
+    data["defaults"]["state_sqlite_dir"] = "runs/shim-state"
+    matrix = load_matrix(write_matrix(tmp_path, data))
+
+    runtime = build_runtime(matrix.defaults, matrix.models[0], tmp_path / "runs" / "run-a")
+    rendered = yaml.safe_load(runtime.config_path.read_text())
+
+    expected_path = tmp_path / "runs" / "shim-state" / "run-a" / "deepseek_v4_pro.sqlite"
+    assert rendered["state"] == {"backend": "sqlite", "sqlite_path": str(expected_path)}
+
+
+def test_empty_reasoning_levels_render_as_empty_catalog_field(tmp_path: Path):
+    data = base_matrix()
+    data["models"][0]["reasoning_levels"] = []
+    matrix = load_matrix(write_matrix(tmp_path, data))
+
+    rendered = render_shim_config(matrix.defaults, matrix.models[0])
+
+    assert matrix.models[0].reasoning_levels == []
+    assert rendered["models"]["catalog"][0]["reasoning_levels"] == []
+
+
+def test_model_temperature_renders_sampling_config(tmp_path: Path):
+    data = base_matrix()
+    data["models"][0]["temperature"] = 0
+    matrix = load_matrix(write_matrix(tmp_path, data))
+
+    rendered = render_shim_config(matrix.defaults, matrix.models[0])
+
+    assert matrix.models[0].temperature == 0.0
+    assert rendered["sampling"] == {"temperature": 0.0}
+
+
+def test_model_temperature_rejects_out_of_range(tmp_path: Path):
+    data = base_matrix()
+    data["models"][0]["temperature"] = 2.1
+
+    with pytest.raises(ValueError, match="models\\[0\\]\\.temperature must be between 0 and 2"):
+        load_matrix(write_matrix(tmp_path, data))
+
+
+def test_upstream_retry_settings_render_into_shim_config(tmp_path: Path):
+    data = base_matrix()
+    data["defaults"]["upstream_max_retries"] = 3
+    data["defaults"]["upstream_stream_max_retries"] = 4
+    matrix = load_matrix(write_matrix(tmp_path, data))
+
+    rendered = render_shim_config(matrix.defaults, matrix.models[0])
+
+    assert rendered["upstream"]["max_retries"] == 3
+    assert rendered["upstream"]["stream_max_retries"] == 4
+
+
+def test_upstream_retry_settings_reject_out_of_range(tmp_path: Path):
+    data = base_matrix()
+    data["defaults"]["upstream_stream_max_retries"] = 101
+
+    with pytest.raises(ValueError, match=r"defaults\.upstream_stream_max_retries must be between 0 and 100"):
+        load_matrix(write_matrix(tmp_path, data))
+
+
+def test_apply_patch_tool_type_can_be_disabled_globally(tmp_path: Path):
+    data = base_matrix()
+    data["defaults"]["apply_patch_tool_type"] = None
+    matrix = load_matrix(write_matrix(tmp_path, data))
+
+    rendered = render_shim_config(matrix.defaults, matrix.models[0])
+
+    assert "apply_patch_tool_type" not in rendered["models"]["catalog"][0]
+
+
+def test_apply_patch_tool_type_rejects_unknown_value(tmp_path: Path):
+    data = base_matrix()
+    data["defaults"]["apply_patch_tool_type"] = "function"
+
+    with pytest.raises(ValueError, match="defaults\\.apply_patch_tool_type must be 'freeform' or null"):
+        load_matrix(write_matrix(tmp_path, data))
 
 
 def test_duplicate_ports_are_rejected(tmp_path: Path):

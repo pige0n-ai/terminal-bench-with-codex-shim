@@ -81,10 +81,20 @@ defaults:
   harbor_jobs_dir: runs
   harbor_n_attempts: 1
   harbor_n_concurrent: 1
+  codex_cli_version: 0.131.0
+  node_version: "22"
+  nvm_version: 0.40.2
+  root_packages: [curl, ripgrep]
+  alpine_packages: [curl, bash, nodejs, npm, ripgrep]
+  apply_patch_tool_type: freeform
+  apply_patch_upstream_tool_type: structured
+  upstream_max_retries: 2
+  upstream_stream_max_retries: 2
   reasoning_enabled: true
   reasoning_effort: xhigh
   context_window: 1000000
-  state_backend: memory
+  state_backend: sqlite
+  state_sqlite_dir: runs/shim-state
   logging_level: info
   tasks:
     - regex-log
@@ -96,6 +106,18 @@ as `--include-task-name`. Use `tasks: []` to run the full dataset.
 
 `harbor_n_attempts` maps to Harbor `--n-attempts`. For leaderboard-style runs,
 set it to `5`; for smoke tests, keep it at `1`.
+
+Dependency-sensitive runs should pin `codex_cli_version`, `node_version`,
+`nvm_version`, and package lists. The default `codex_cli_version: 0.131.0`
+matches the latest version observed in run-7; without this pin Harbor's Codex
+agent installs `@openai/codex@latest` inside each task container, which can drift
+within a single run. `apply_patch_tool_type: freeform` is emitted into the shim
+model catalog so Codex exposes `apply_patch` as a callable tool instead of only
+mentioning patching in instructions.
+
+For long Terminal-Bench runs, prefer `state_backend: sqlite`. The harness writes one
+SQLite database per run/model under `state_sqlite_dir/<run-name>/<model-id>.sqlite`,
+which avoids keeping shim state only in process memory.
 
 Per-model entries may override safe provider/model-level fields:
 
@@ -191,6 +213,9 @@ images and makes future runs slower.
 Each run writes:
 
 - `runs/<run-name>/generated/*.yaml`: generated `codex-shim` configs.
+- `runs/<run-name>/jobs/*/*/agent/config.toml`: exact Codex config used inside a task container.
+- `runs/<run-name>/jobs/*/*/agent/model-catalog-shim.json`: exact model catalog consumed by Codex.
+- `runs/<run-name>/jobs/*/*/agent/codex-version.txt` and `codex-features.txt`: pinned Codex CLI version and enabled feature surface.
 - `runs/<run-name>/shim-logs/*.log`: one shim log per model.
 - `runs/<run-name>/jobs/`: raw Harbor job directories.
 - `runs/<run-name>/matrix.resolved.json`: resolved model and command metadata.

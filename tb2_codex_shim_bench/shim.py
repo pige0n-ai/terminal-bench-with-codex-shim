@@ -39,17 +39,35 @@ class ShimProcess:
             self.process.wait(timeout=10)
 
 
-def render_shim_config(defaults: Defaults, model: ModelEntry) -> dict:
+def render_shim_config(defaults: Defaults, model: ModelEntry, sqlite_path: Path | None = None) -> dict:
     context_window = model.context_window or defaults.context_window
     reasoning_effort = model.reasoning_effort or defaults.reasoning_effort
     reasoning_enabled = defaults.reasoning_enabled if model.reasoning_enabled is None else model.reasoning_enabled
-    reasoning_levels = model.reasoning_levels or [reasoning_effort]
+    reasoning_levels = model.reasoning_levels if model.reasoning_levels is not None else [reasoning_effort]
+    apply_patch_tool_type = model.apply_patch_tool_type or defaults.apply_patch_tool_type
+    apply_patch_upstream_tool_type = model.apply_patch_upstream_tool_type or defaults.apply_patch_upstream_tool_type
 
     profile_config: dict = {"profile": model.provider_profile}
     if model.capabilities:
         profile_config["capabilities"] = model.capabilities
     if model.extra_body:
         profile_config["extra_body"] = model.extra_body
+
+    state_config: dict[str, str] = {"backend": defaults.state_backend}
+    if defaults.state_backend == "sqlite":
+        if sqlite_path is None:
+            raise ValueError("sqlite state backend requires a sqlite_path")
+        state_config["sqlite_path"] = str(sqlite_path)
+
+    catalog_entry: dict[str, object] = {
+        "slug": model.model_slug,
+        "context_window": context_window,
+        "reasoning_levels": reasoning_levels,
+    }
+    if apply_patch_tool_type is not None:
+        catalog_entry["apply_patch_tool_type"] = apply_patch_tool_type
+    if apply_patch_upstream_tool_type is not None:
+        catalog_entry["apply_patch_upstream_tool_type"] = apply_patch_upstream_tool_type
 
     config: dict = {
         "server": {
@@ -68,35 +86,45 @@ def render_shim_config(defaults: Defaults, model: ModelEntry) -> dict:
         },
         "models": {
             "default": model.model_slug,
-            "catalog": [
-                {
-                    "slug": model.model_slug,
-                    "context_window": context_window,
-                    "reasoning_levels": reasoning_levels,
-                }
-            ],
+            "catalog": [catalog_entry],
         },
-        "state": {
-            "backend": defaults.state_backend,
-        },
+        "state": state_config,
         "logging": {
             "level": defaults.logging_level,
         },
     }
     if model.upstream_base_url:
         config["upstream"]["base_url"] = model.upstream_base_url
+    if defaults.upstream_max_retries is not None:
+        config["upstream"]["max_retries"] = defaults.upstream_max_retries
+    if defaults.upstream_stream_max_retries is not None:
+        config["upstream"]["stream_max_retries"] = defaults.upstream_stream_max_retries
+    if model.temperature is not None:
+        config["sampling"] = {"temperature": model.temperature}
     return config
 
 
-def write_shim_config(defaults: Defaults, model: ModelEntry, out_dir: Path) -> Path:
+def write_shim_config(
+    defaults: Defaults,
+    model: ModelEntry,
+    out_dir: Path,
+    *,
+    sqlite_path: Path | None = None,
+) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"{model.id}.yaml"
-    path.write_text(yaml.safe_dump(render_shim_config(defaults, model), sort_keys=False))
+    path.write_text(yaml.safe_dump(render_shim_config(defaults, model, sqlite_path), sort_keys=False))
     return path
 
 
 def build_runtime(defaults: Defaults, model: ModelEntry, run_dir: Path) -> ShimRuntime:
-    config_path = write_shim_config(defaults, model, run_dir / "generated")
+    sqlite_path = None
+    if defaults.state_backend == "sqlite":
+        if defaults.state_sqlite_dir is None:
+            raise ValueError("sqlite state backend requires defaults.state_sqlite_dir")
+        sqlite_path = defaults.state_sqlite_dir / run_dir.name / f"{model.id}.sqlite"
+        sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path = write_shim_config(defaults, model, run_dir / "generated", sqlite_path=sqlite_path)
     log_path = run_dir / "shim-logs" / f"{model.id}.log"
     base_url = f"http://{defaults.docker_host}:{model.port}/v1"
     health_url = f"http://127.0.0.1:{model.port}/healthz"

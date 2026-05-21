@@ -38,6 +38,11 @@ def test_run_harbor_filters_terminal_bench_dataset_task(monkeypatch, tmp_path: P
     assert "--task" not in captured["cmd"]
     assert captured["cmd"][captured["cmd"].index("--include-task-name") + 1] == "regex-log"
     assert captured["cmd"][captured["cmd"].index("--n-attempts") + 1] == "5"
+    assert "codex_cli_version=0.131.0" in captured["cmd"]
+    assert "node_version=22" in captured["cmd"]
+    assert "nvm_version=0.40.2" in captured["cmd"]
+    assert "root_packages=curl,ripgrep" in captured["cmd"]
+    assert "alpine_packages=curl,bash,nodejs,npm,ripgrep" in captured["cmd"]
 
 
 def test_run_harbor_full_dataset_has_no_task_filter(monkeypatch, tmp_path: Path):
