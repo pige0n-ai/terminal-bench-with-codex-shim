@@ -1,0 +1,50 @@
+# Terminal-Bench matrix for Claude Code routed to Anthropic-compatible providers.
+# DeepSeek can be used directly through its Anthropic API endpoint; no codex-shim
+# process is required for this runner.
+
+defaults:
+  harbor_bin: harbor
+  harbor_dataset: terminal-bench/terminal-bench-2-1
+  harbor_jobs_dir: runs
+  harbor_n_attempts: 5
+  harbor_n_concurrent: 6
+  claude_code_version: 2.1.144
+  temperature: 0.0
+  thinking_display: omitted
+  disallowed_tools: WebSearch,WebFetch
+  tasks: []
+
+models:
+  - id: deepseek_v4_flash_nonthinking
+    model_slug: deepseek-v4-flash
+    api_key_env: DEEPSEEK_API_KEY
+    anthropic_base_url: https://api.deepseek.com/anthropic
+    thinking: disabled
+    reasoning_effort: high
+
+  - id: deepseek_v4_flash_thinking
+    model_slug: deepseek-v4-flash
+    api_key_env: DEEPSEEK_API_KEY
+    anthropic_base_url: https://api.deepseek.com/anthropic
+    thinking: enabled
+    reasoning_effort: max
+
+  - id: deepseek_v4_pro_thinking
+    model_slug: deepseek-v4-pro[1m]
+    api_key_env: DEEPSEEK_API_KEY
+    anthropic_base_url: https://api.deepseek.com/anthropic
+    thinking: enabled
+    reasoning_effort: max
+
+  # DeepSeek's Anthropic endpoint also accepts top_p and extra top-level request
+  # fields through CLAUDE_CODE_EXTRA_BODY. Keep provider-specific settings here.
+  # - id: deepseek_v4_flash_custom_sampling
+  #   model_slug: deepseek-v4-flash
+  #   api_key_env: DEEPSEEK_API_KEY
+  #   anthropic_base_url: https://api.deepseek.com/anthropic
+  #   thinking: disabled
+  #   reasoning_effort: high
+  #   temperature: 0.0
+  #   top_p: 1.0
+  #   extra_body:
+  #     metadata: {user_id: terminal-bench}

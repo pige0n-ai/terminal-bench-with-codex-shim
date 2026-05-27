@@ -15,10 +15,14 @@ test = [
 
 [project.scripts]
 tb2-codex-shim-bench = "tb2_codex_shim_bench.cli:main"
+tb2-claude-code-bench = "tb2_claude_code_bench.cli:main"
 
 [build-system]
 requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["tb2_codex_shim_bench*", "tb2_claude_code_bench*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

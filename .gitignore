@@ -7,3 +7,5 @@ generated/
 *.log
 *.egg-info/
 matrix.yaml
+codex-shim*
+*.[0-9].yaml

@@ -1,5 +1,9 @@
+import importlib
+import json
 import os
 import subprocess
+import sys
+import types
 from pathlib import Path
 
 from tb2_codex_shim_bench.agent_setup import setup_command
@@ -152,3 +156,108 @@ def test_setup_command_rejects_invalid_catalog_without_clobbering_previous_catal
     assert catalog.read_text() == '{"models":[{"slug":"old"}]}'
     assert not list(code_home.glob("model-catalog-shim.json.tmp.*"))
     assert not (tmp_path / "agent" / "model-catalog-shim.json").exists()
+
+
+def import_shimmed_codex(monkeypatch):
+    base_module = types.ModuleType("harbor.agents.installed.base")
+    codex_module = types.ModuleType("harbor.agents.installed.codex")
+    environment_module = types.ModuleType("harbor.environments.base")
+    context_module = types.ModuleType("harbor.models.agent.context")
+    paths_module = types.ModuleType("harbor.models.trial.paths")
+
+    def with_prompt_template(func):
+        return func
+
+    class Codex:
+        _REMOTE_CODEX_HOME = Path("/tmp/codex-home")
+        _REMOTE_CODEX_SECRETS_DIR = Path("/tmp/codex-secrets")
+        _OUTPUT_FILENAME = "codex.txt"
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class BaseEnvironment:
+        pass
+
+    class AgentContext:
+        pass
+
+    class EnvironmentPaths:
+        agent_dir = Path("/tmp/agent")
+
+    base_module.with_prompt_template = with_prompt_template
+    codex_module.Codex = Codex
+    environment_module.BaseEnvironment = BaseEnvironment
+    context_module.AgentContext = AgentContext
+    paths_module.EnvironmentPaths = EnvironmentPaths
+
+    for module_name in [
+        "harbor",
+        "harbor.agents",
+        "harbor.agents.installed",
+        "harbor.environments",
+        "harbor.models",
+        "harbor.models.agent",
+        "harbor.models.trial",
+    ]:
+        monkeypatch.setitem(sys.modules, module_name, types.ModuleType(module_name))
+    monkeypatch.setitem(sys.modules, "harbor.agents.installed.base", base_module)
+    monkeypatch.setitem(sys.modules, "harbor.agents.installed.codex", codex_module)
+    monkeypatch.setitem(sys.modules, "harbor.environments.base", environment_module)
+    monkeypatch.setitem(sys.modules, "harbor.models.agent.context", context_module)
+    monkeypatch.setitem(sys.modules, "harbor.models.trial.paths", paths_module)
+    sys.modules.pop("tb2_codex_shim_bench.harbor_agent", None)
+    return importlib.import_module("tb2_codex_shim_bench.harbor_agent").ShimmedCodex
+
+
+def test_shimmed_codex_accepts_dict_catalog_json(tmp_path, monkeypatch):
+    """ShimmedCodex serializes a dict model_catalog_json back to JSON."""
+    ShimmedCodex = import_shimmed_codex(monkeypatch)
+
+    catalog_dict = {"models": [{"slug": "deepseek-v4-flash"}]}
+    expected_json = json.dumps(catalog_dict)
+
+    agent = ShimmedCodex(
+        logs_dir=tmp_path / "logs",
+        model_name="deepseek-v4-flash",
+        codex_shim_base_url="http://127.0.0.1:8877/v1",
+        model_catalog_json=catalog_dict,
+    )
+
+    actual = json.loads(agent.model_catalog_json)
+    assert actual == catalog_dict
+    assert agent.model_catalog_json == expected_json
+
+
+def test_shimmed_codex_accepts_list_catalog_json(tmp_path, monkeypatch):
+    """ShimmedCodex wraps a list model_catalog_json in {models: [...]} and serializes."""
+    ShimmedCodex = import_shimmed_codex(monkeypatch)
+
+    catalog_list = [{"slug": "deepseek-v4-flash"}]
+    expected_dict = {"models": catalog_list}
+
+    agent = ShimmedCodex(
+        logs_dir=tmp_path / "logs",
+        model_name="deepseek-v4-flash",
+        codex_shim_base_url="http://127.0.0.1:8877/v1",
+        model_catalog_json=catalog_list,
+    )
+
+    actual = json.loads(agent.model_catalog_json)
+    assert actual == expected_dict
+
+
+def test_shimmed_codex_passes_through_string_catalog_json(tmp_path, monkeypatch):
+    """ShimmedCodex passes through a JSON string model_catalog_json unchanged."""
+    ShimmedCodex = import_shimmed_codex(monkeypatch)
+
+    catalog_str = '''{"models": [{"slug": "deepseek-v4-flash"}]}'''
+
+    agent = ShimmedCodex(
+        logs_dir=tmp_path / "logs",
+        model_name="deepseek-v4-flash",
+        codex_shim_base_url="http://127.0.0.1:8877/v1",
+        model_catalog_json=catalog_str,
+    )
+
+    assert agent.model_catalog_json == catalog_str

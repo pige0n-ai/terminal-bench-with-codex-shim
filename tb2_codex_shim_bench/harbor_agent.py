@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shlex
+import json
 from typing import Any
 
 from .agent_setup import setup_command
@@ -35,6 +36,12 @@ class ShimmedCodex(Codex):
         self.codex_model_provider = codex_model_provider
         self.context_window = context_window
         self.reasoning_effort = reasoning_effort
+        # Harbor's --ak parsing runs json.loads() on structured values, so the
+        # catalog JSON may arrive as a dict. Always re-serialize to a JSON string.
+        if isinstance(model_catalog_json, dict):
+            model_catalog_json = json.dumps(model_catalog_json)
+        elif isinstance(model_catalog_json, list):
+            model_catalog_json = json.dumps({"models": model_catalog_json})
         self.model_catalog_json = _required_text(model_catalog_json, "model_catalog_json")
         self.codex_cli_version = _required_text(codex_cli_version, "codex_cli_version")
         self.node_version = _required_text(node_version, "node_version")
