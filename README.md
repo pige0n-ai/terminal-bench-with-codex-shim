@@ -1,36 +1,147 @@
-# Terminal-Bench 2.0 via Codex CLI and codex-shim
+# Terminal-Bench Harbor Runners
 
-This repository runs Terminal-Bench 2.0 model/provider matrices through Codex CLI while routing all model traffic through `codex-shim`.
+This repository provides two Harbor runners for Terminal-Bench experiments:
 
-`codex-shim` presents a Codex-compatible `/v1/responses` API. Codex must always be configured with `wire_api = "responses"`; the shim then adapts requests to upstream Chat Completions or native Responses providers according to the configured provider profile.
+- `tb2-codex-shim-bench`: runs Codex CLI through `codex-shim`.
+- `tb2-claude-code-bench`: runs Claude Code against Anthropic-compatible APIs.
 
-## Architecture
+Both runners use matrix YAML files to describe datasets, Harbor concurrency,
+task filters, and model-specific settings. They write Harbor job directories,
+resolved matrix metadata, and summary files under `runs/<run-name>/`.
+
+## Runner Overview
 
 ```text
 tb2-codex-shim-bench
-  -> starts one codex-shim process per model/provider entry
+  -> starts one codex-shim process per matrix model
   -> runs Harbor jobs
-  -> Harbor Docker task container
-  -> ShimmedCodex writes container-local CODEX_HOME
-  -> codex exec --json
-  -> codex-shim /v1/responses
-  -> upstream provider
+  -> installs a pinned Codex CLI in each task container
+  -> runs codex exec --json
+  -> sends Codex Responses API traffic to codex-shim
+  -> codex-shim adapts the request to the configured upstream provider profile
 ```
 
-The harness intentionally does not use Codex `/goal`.
+```text
+tb2-claude-code-bench
+  -> runs Harbor jobs
+  -> installs a pinned Claude Code CLI in each task container
+  -> runs claude
+  -> sends Anthropic API traffic to the configured compatible endpoint
+```
 
-## codex-shim contract
+The Codex runner intentionally does not use Codex `/goal`.
 
-The harness depends on these `codex-shim` rules:
+## Requirements
 
-- Codex side uses `model_provider = "codex_shim"`, top-level `model_catalog_json`, and provider `wire_api = "responses"`.
-- `supports_websockets = false` is required because `codex-shim` serves HTTP + SSE.
-- Codex `model`, shim `models.default`, and at least one `models.catalog[*].slug` must match.
-- Shim upstream auth is controlled by the shim YAML `upstream.api_key_env`; the harness never reads or prints secret values.
-- Chat-backed profiles are adapted internally. Their tool-call and streaming behavior can vary by provider, so results must be interpreted with the provider profile attached.
-- Matrix `capabilities` supports only boolean provider capability overrides, such as `supports_json_schema` or `supports_reasoning_effort`. It intentionally does not expose `endpoint_mode`, `reasoning_policy`, `tool_policy`, or `state_policy`; those change protocol/state semantics and should be encoded in a proper `codex-shim` profile instead.
+- Docker with Linux containers enabled.
+- `harbor` on `PATH`.
+- `codex-shim` on `PATH`, or `CODEX_SHIM_BIN` set, for Codex shim runs.
+- Provider API keys exported in the host environment, for example
+  `DEEPSEEK_API_KEY`.
 
-Known provider profiles include:
+Install the Python package:
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
+pip install -e '.[test]'
+```
+
+## Codex Shim Runner
+
+Start from the full provider template:
+
+```bash
+cp examples/matrix.template.yaml matrix.yaml
+```
+
+`examples/matrix.template.yaml` contains commented entries for supported
+`codex-shim` provider profiles. Uncomment the models you want to run and keep
+ports unique across active entries.
+
+Validate the matrix:
+
+```bash
+tb2-codex-shim-bench validate \
+  --matrix matrix.yaml \
+  --check-env \
+  --check-shim-bin
+```
+
+Run one task:
+
+```bash
+tb2-codex-shim-bench smoke \
+  --matrix matrix.yaml \
+  --model deepseek_v4_flash \
+  --task regex-log \
+  --run-name smoke-codex-regex-log
+```
+
+Run the configured matrix:
+
+```bash
+tb2-codex-shim-bench run --matrix matrix.yaml --run-name codex-matrix
+```
+
+Summarize an existing run:
+
+```bash
+tb2-codex-shim-bench summarize --run-dir runs/codex-matrix
+```
+
+### Codex Matrix Fields
+
+Important `defaults` fields:
+
+- `codex_shim_bin`: path or command used to start `codex-shim`.
+- `listen_host`: host interface used by shim processes.
+- `docker_host`: hostname used by Harbor task containers to reach the host.
+- `harbor_dataset`: Harbor dataset name, for example `terminal-bench@2.0`.
+- `harbor_n_attempts`: value passed to Harbor `--n-attempts`.
+- `harbor_n_concurrent`: value passed to Harbor `--n-concurrent`.
+- `codex_cli_version`: npm version of `@openai/codex` installed in containers.
+- `node_version`, `nvm_version`, `root_packages`, `alpine_packages`:
+  task-container dependency pins.
+- `apply_patch_tool_type`: tool shape advertised to Codex by the model catalog.
+- `apply_patch_upstream_tool_type`: tool shape sent upstream by `codex-shim`.
+- `state_backend`: shim state backend, usually `sqlite` for long runs.
+- `state_sqlite_dir`: directory for per-run, per-model shim SQLite state.
+- `tasks`: Harbor task names. Use `[]` to run the full dataset.
+
+Important model fields:
+
+- `id`: local matrix identifier.
+- `provider_profile`: `codex-shim` provider profile name.
+- `model_slug`: model name used by Codex and the shim catalog.
+- `api_key_env`: environment variable containing the upstream API key.
+- `port`: host port for this model's shim process.
+- `upstream_base_url`: upstream provider base URL.
+- `harbor_model_name`: optional `provider/model` label recorded by Harbor.
+- `reasoning_enabled`, `reasoning_effort`, `reasoning_levels`: reasoning
+  settings exposed through the shim catalog.
+- `capabilities`: boolean provider capability overrides only.
+- `extra_body`: provider-specific request body fields passed to `codex-shim`.
+
+`capabilities` should not be used to change protocol behavior. Settings such as
+endpoint mode, reasoning policy, tool policy, and state policy belong in a
+proper `codex-shim` provider profile.
+
+### codex-shim Contract
+
+The generated Codex config and shim config rely on these invariants:
+
+- Codex uses `model_provider = "codex_shim"`.
+- The provider uses `wire_api = "responses"`.
+- The generated model catalog is referenced with top-level
+  `model_catalog_json`.
+- `supports_websockets = false` because `codex-shim` serves HTTP and SSE.
+- Codex `model`, shim `models.default`, and at least one
+  `models.catalog[*].slug` match.
+- Upstream auth is read by `codex-shim` from `upstream.api_key_env`; the harness
+  never reads or prints secret values.
+
+Supported profiles include:
 
 ```text
 deepseek-chat, minimax-chat, moonshot-chat, zai-chat, gemini-chat, vertex-chat,
@@ -41,188 +152,154 @@ together-chat, ollama-chat, ollama-responses, llamacpp-chat,
 llamacpp-responses, vllm-chat, vllm-responses, sglang-chat, generic-chat
 ```
 
-## Quick start
+## Claude Code Runner
 
-Prerequisites:
-
-- Docker with Linux containers enabled.
-- `harbor` on `PATH`.
-- `codex-shim` built or installed locally.
-- Provider API keys exported in the host environment, for example `DEEPSEEK_API_KEY`.
-
-Install the Python project:
+Start from the Claude Code example:
 
 ```bash
-python -m venv .venv
-. .venv/bin/activate
-pip install -e '.[test]'
+cp examples/matrix.claude.yaml matrix.claude.yaml
 ```
 
-Prepare a matrix:
+The Claude runner does not start `codex-shim`. Each model points Claude Code at
+an Anthropic-compatible endpoint through `anthropic_base_url`.
+
+Validate the matrix:
 
 ```bash
-cp examples/matrix.template.yaml matrix.yaml
+tb2-claude-code-bench validate --matrix matrix.claude.yaml --check-env
 ```
 
-`examples/matrix.template.yaml` includes every supported provider profile.
-Model entries are commented out by default; uncomment at least one entry before
-validating or running. `matrix.yaml` is ignored by git so local model
-selections, paths, and ports do not get committed accidentally.
-
-The key `defaults` fields are:
-
-```yaml
-defaults:
-  codex_shim_bin: ${CODEX_SHIM_BIN:-codex-shim}
-  listen_host: 0.0.0.0
-  docker_host: host.docker.internal
-  harbor_bin: harbor
-  harbor_dataset: terminal-bench@2.0
-  harbor_jobs_dir: runs
-  harbor_n_attempts: 1
-  harbor_n_concurrent: 1
-  codex_cli_version: 0.131.0
-  node_version: "22"
-  nvm_version: 0.40.2
-  root_packages: [curl, ripgrep]
-  alpine_packages: [curl, bash, nodejs, npm, ripgrep]
-  apply_patch_tool_type: freeform
-  apply_patch_upstream_tool_type: structured
-  upstream_max_retries: 2
-  upstream_stream_max_retries: 2
-  reasoning_enabled: true
-  reasoning_effort: xhigh
-  context_window: 1000000
-  state_backend: sqlite
-  state_sqlite_dir: runs/shim-state
-  logging_level: info
-  tasks:
-    - regex-log
-```
-
-For Terminal-Bench 2.0, keep `harbor_dataset: terminal-bench@2.0`. Task filters
-are dataset-local names such as `regex-log`; the harness passes them to Harbor
-as `--include-task-name`. Use `tasks: []` to run the full dataset.
-
-`harbor_n_attempts` maps to Harbor `--n-attempts`. For leaderboard-style runs,
-set it to `5`; for smoke tests, keep it at `1`.
-
-Dependency-sensitive runs should pin `codex_cli_version`, `node_version`,
-`nvm_version`, and package lists. The default `codex_cli_version: 0.131.0`
-matches the latest version observed in run-7; without this pin Harbor's Codex
-agent installs `@openai/codex@latest` inside each task container, which can drift
-within a single run. `apply_patch_tool_type: freeform` is emitted into the shim
-model catalog so Codex exposes `apply_patch` as a callable tool instead of only
-mentioning patching in instructions.
-
-For long Terminal-Bench runs, prefer `state_backend: sqlite`. The harness writes one
-SQLite database per run/model under `state_sqlite_dir/<run-name>/<model-id>.sqlite`,
-which avoids keeping shim state only in process memory.
-
-Per-model entries may override safe provider/model-level fields:
-
-```yaml
-models:
-  - id: deepseek_v4_flash
-    provider_profile: deepseek-chat
-    model_slug: deepseek-v4-flash
-    api_key_env: DEEPSEEK_API_KEY
-    port: 8877
-    upstream_base_url: https://api.deepseek.com
-    context_window: 1000000
-    reasoning_enabled: true
-    reasoning_effort: xhigh
-    reasoning_levels: [xhigh, high]
-    harbor_model_name: deepseek/deepseek-v4-flash
-    capabilities:
-      supports_reasoning_effort: true
-      supports_json_schema: false
-    extra_body:
-      thinking: enabled
-```
-
-`harbor_model_name` is optional. When set to `provider/model`, Harbor records
-the provider in `agent_info.model_info.provider`; the Codex CLI config still
-uses the final path segment as the shim model slug.
-
-Validate:
+Run one task:
 
 ```bash
-tb2-codex-shim-bench validate --matrix matrix.yaml --check-env --check-shim-bin
-```
-
-Run one smoke task:
-
-```bash
-tb2-codex-shim-bench smoke \
-  --matrix matrix.yaml \
-  --model deepseek_v4_flash \
-  --task regex-log \
-  --run-name smoke-regex-log
+tb2-claude-code-bench smoke \
+  --matrix matrix.claude.yaml \
+  --model deepseek_v4_flash_nonthinking \
+  --task terminal-bench/regex-log \
+  --run-name smoke-claude-regex-log
 ```
 
 Run the configured matrix:
 
 ```bash
-tb2-codex-shim-bench run --matrix matrix.yaml --run-name tb2-matrix
+tb2-claude-code-bench run --matrix matrix.claude.yaml --run-name claude-matrix
 ```
 
 Summarize an existing run:
 
 ```bash
-tb2-codex-shim-bench summarize --run-dir runs/tb2-matrix
+tb2-claude-code-bench summarize --run-dir runs/claude-matrix
 ```
 
-Run tests:
+### Claude Matrix Fields
+
+Important `defaults` fields:
+
+- `harbor_dataset`: Harbor dataset name.
+- `harbor_n_attempts`: value passed to Harbor `--n-attempts`.
+- `harbor_n_concurrent`: value passed to Harbor `--n-concurrent`.
+- `claude_code_version`: npm version of `@anthropic-ai/claude-code`.
+- `temperature`, `top_p`, `extra_body`: request body fields exported through
+  `CLAUDE_CODE_EXTRA_BODY`.
+- `thinking`, `reasoning_effort`, `thinking_display`, `max_thinking_tokens`:
+  Claude Code thinking controls.
+- `max_output_tokens`: exported as `CLAUDE_CODE_MAX_OUTPUT_TOKENS`.
+- `max_turns`, `max_budget_usd`, `fallback_model`: Claude Code agent options.
+- `allowed_tools`, `disallowed_tools`: tool allow/block lists passed to Harbor.
+- `extra_env`: additional environment variables passed into the task container.
+- `tasks`: Harbor task names. Use `[]` to run the full dataset.
+
+Important model fields:
+
+- `id`: local matrix identifier.
+- `model_slug`: model name passed to Harbor and Claude Code.
+- `api_key_env`: environment variable containing the provider API key.
+- `anthropic_base_url`: Anthropic-compatible base URL.
+- Any supported default field can be overridden per model.
+
+The runner sets `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
+`ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`,
+`ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_HAIKU_MODEL`,
+`CLAUDE_CODE_SUBAGENT_MODEL`, and
+`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` for each Harbor invocation.
+
+## Tasks And Attempts
+
+`tasks` entries are passed to Harbor as `--include-task-name`. Leave `tasks` as
+`[]` to run the whole dataset, or use the `smoke` subcommand to run a single
+task without editing the matrix.
+
+`harbor_n_attempts` maps directly to Harbor `--n-attempts`. Use `1` for smoke
+runs and higher values for repeated benchmark attempts.
+
+## Docker Networking
+
+Codex shim runs start shim processes on the host. Harbor task containers reach
+them at:
+
+```text
+http://<docker_host>:<port>/v1
+```
+
+The default `docker_host` is `host.docker.internal`. On Linux, Docker must
+provide that hostname through host-gateway or equivalent daemon/network
+configuration. The Codex runner performs a connectivity check before launching
+Harbor.
+
+## Outputs
+
+Both runners write:
+
+- `runs/<run-name>/jobs/`: raw Harbor job directories.
+- `runs/<run-name>/matrix.resolved.json`: resolved model metadata and Harbor
+  command records.
+- `runs/<run-name>/summary.json` and `runs/<run-name>/summary.csv`: result
+  rollups.
+- `runs/<run-name>/harbor-*.log`: Harbor stdout/stderr for each model/task
+  invocation.
+
+Codex shim runs also write:
+
+- `runs/<run-name>/generated/*.yaml`: generated `codex-shim` configs.
+- `runs/<run-name>/shim-logs/*.log`: shim logs.
+- `runs/<run-name>/jobs/*/*/agent/config.toml`: Codex config copied from the
+  task container.
+- `runs/<run-name>/jobs/*/*/agent/model-catalog-shim.json`: model catalog used
+  by Codex.
+- `runs/<run-name>/jobs/*/*/agent/codex-version.txt`: installed Codex CLI
+  version.
+- `runs/<run-name>/jobs/*/*/agent/codex-features.txt`: enabled Codex feature
+  surface.
+
+Harbor uploads are explicit. These runners do not pass `--upload` by default.
+
+## Stopping Runs
+
+Press `Ctrl+C` in the terminal running the benchmark command. If child
+processes remain, inspect the process group and terminate it:
+
+```bash
+ps -eo pid,ppid,pgid,stat,cmd | grep -E 'tb2-(codex-shim|claude-code)-bench|harbor run|codex-shim|claude'
+kill -TERM -<PGID>
+```
+
+On exit, both runners inspect only the Harbor job directories started by the
+current process. They remove Docker containers and compose networks whose
+`com.docker.compose.project` label matches the Harbor trial names under those
+job directories. Harbor job names include a per-process invocation suffix, so
+two concurrent processes with the same `--run-name` still get separate job
+directories. The runners do not run global Docker prune commands, so concurrent
+benchmark processes and unrelated services are left alone.
+
+Avoid `docker system prune` while iterating on benchmark runs; it removes cached
+task images and slows down subsequent runs.
+
+## Tests
 
 ```bash
 pytest -q -s
 ```
 
-## Docker networking
-
-Each shim listens on `0.0.0.0:<port>` on the host. Harbor task containers call it as:
-
-```text
-http://host.docker.internal:<port>/v1
-```
-
-On Linux, Docker must support `host.docker.internal` via host gateway or equivalent daemon/network configuration. The harness includes a Docker connectivity check before running Harbor.
-
-## Running And Stopping
-
-Full Terminal-Bench 2.0 with `harbor_n_attempts: 5` runs `89 * 5 = 445`
-trials per model. The first run can spend substantial time pulling task images
-and installing Codex CLI inside task containers. Harbor `--n-concurrent` means
-concurrent scheduled trials, not necessarily the exact number of visible
-`docker ps` containers at every moment.
-
-To stop a run, press `Ctrl+C` in the terminal running `tb2-codex-shim-bench`.
-If processes remain, inspect and stop the process group:
-
-```bash
-ps -eo pid,ppid,pgid,stat,cmd | rg 'tb2-codex-shim-bench|harbor run|codex-shim'
-kill -TERM -<PGID>
-```
-
-Avoid `docker system prune` during active development; it removes cached task
-images and makes future runs slower.
-
-## Outputs
-
-Each run writes:
-
-- `runs/<run-name>/generated/*.yaml`: generated `codex-shim` configs.
-- `runs/<run-name>/jobs/*/*/agent/config.toml`: exact Codex config used inside a task container.
-- `runs/<run-name>/jobs/*/*/agent/model-catalog-shim.json`: exact model catalog consumed by Codex.
-- `runs/<run-name>/jobs/*/*/agent/codex-version.txt` and `codex-features.txt`: pinned Codex CLI version and enabled feature surface.
-- `runs/<run-name>/shim-logs/*.log`: one shim log per model.
-- `runs/<run-name>/jobs/`: raw Harbor job directories.
-- `runs/<run-name>/matrix.resolved.json`: resolved model and command metadata.
-- `runs/<run-name>/summary.json` and `summary.csv`: result rollup.
-
-Harbor uploads are explicit. This harness does not pass `--upload` by default.
-If you upload a job later with `harbor upload`, the agent name recorded in new
-trial results is `ShimmedCodex`.
-
-Failures are classified rather than hidden. Missing env vars, unreachable shim processes, Harbor registry errors, upstream API errors, and agent/verifier failures remain explicit.
+Failures are classified rather than hidden. Missing env vars, unreachable shim
+processes, Harbor registry errors, upstream API errors, and agent/verifier
+failures remain explicit.

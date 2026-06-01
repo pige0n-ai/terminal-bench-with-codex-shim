@@ -4,8 +4,10 @@ import argparse
 import json
 import sys
 import time
+import uuid
 from pathlib import Path
 
+from tb2_codex_shim_bench.docker_cleanup import cleanup_harbor_docker, format_cleanup_summary
 from tb2_codex_shim_bench.summary import write_summary
 
 from .config import load_matrix, validate_matrix
@@ -89,29 +91,44 @@ def _run_models(matrix, model_ids: list[str], tasks: list[str], run_name: str) -
     }
 
     exit_code = 0
-    for model_id in model_ids:
-        model = matrix.model_by_id(model_id)
-        resolved["models"].append(model.resolved_metadata(matrix.defaults))
-        task_groups = [[task] for task in tasks] if tasks else [[]]
-        for task_group in task_groups:
-            task_suffix = f"-{_safe_slug(task_group[0])}" if task_group else "-full"
-            job_name = f"{run_name}-{model.id}{task_suffix}"
-            result = run_harbor(
-                defaults=matrix.defaults,
-                model=model,
-                jobs_dir=jobs_root,
-                job_name=job_name,
-                tasks=task_group,
-                repo_root=repo_root,
-            )
-            harbor_log = run_dir / f"harbor-{model.id}{task_suffix}.log"
-            harbor_log.write_text(result.stdout)
-            resolved["harbor_results"].append(
-                {"model_id": model.id, "tasks": task_group, "return_code": result.return_code, "command": result.command, "log_path": str(harbor_log)}
-            )
-            if result.return_code != 0:
-                exit_code = 1
-                print(result.stdout, file=sys.stderr)
+    invocation_id = uuid.uuid4().hex[:8]
+    started_job_names: list[str] = []
+    try:
+        for model_id in model_ids:
+            model = matrix.model_by_id(model_id)
+            resolved["models"].append(model.resolved_metadata(matrix.defaults))
+            task_groups = [[task] for task in tasks] if tasks else [[]]
+            for task_group in task_groups:
+                task_suffix = f"-{_safe_slug(task_group[0])}" if task_group else "-full"
+                job_name = f"{run_name}-{model.id}{task_suffix}-{invocation_id}"
+                started_job_names.append(job_name)
+                result = run_harbor(
+                    defaults=matrix.defaults,
+                    model=model,
+                    jobs_dir=jobs_root,
+                    job_name=job_name,
+                    tasks=task_group,
+                    repo_root=repo_root,
+                )
+                harbor_log = run_dir / f"harbor-{model.id}{task_suffix}.log"
+                harbor_log.write_text(result.stdout)
+                resolved["harbor_results"].append(
+                    {
+                        "model_id": model.id,
+                        "tasks": task_group,
+                        "return_code": result.return_code,
+                        "command": result.command,
+                        "log_path": str(harbor_log),
+                    }
+                )
+                if result.return_code != 0:
+                    exit_code = 1
+                    print(result.stdout, file=sys.stderr)
+    finally:
+        cleanup = cleanup_harbor_docker(jobs_root, job_names=started_job_names)
+        print(format_cleanup_summary(cleanup))
+        for error in cleanup.errors:
+            print(f"warning: {error}", file=sys.stderr)
 
     (run_dir / "matrix.resolved.json").write_text(json.dumps(resolved, indent=2, sort_keys=True))
     write_summary(run_dir)

@@ -1,6 +1,9 @@
 # Terminal-Bench matrix for Claude Code routed to Anthropic-compatible providers.
 # DeepSeek can be used directly through its Anthropic API endpoint; no codex-shim
 # process is required for this runner.
+#
+# Copy this file to matrix.claude.yaml before editing. Keep local credentials,
+# private endpoints, and run-specific task lists out of the committed example.
 
 defaults:
   harbor_bin: harbor
@@ -12,6 +15,10 @@ defaults:
   temperature: 0.0
   thinking_display: omitted
   disallowed_tools: WebSearch,WebFetch
+  # Use [] for the full dataset. For smoke runs, prefer the CLI `smoke`
+  # subcommand or put one Harbor task name here, for example:
+  # tasks:
+  #   - terminal-bench/regex-log
   tasks: []
 
 models:
@@ -46,5 +53,9 @@ models:
   #   reasoning_effort: high
   #   temperature: 0.0
   #   top_p: 1.0
+  #   max_turns: 200
+  #   max_budget_usd: "20"
   #   extra_body:
   #     metadata: {user_id: terminal-bench}
+  #   extra_env:
+  #     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"

@@ -1,11 +1,14 @@
 # Full provider/profile template for tb2-codex-shim-bench.
+# Use examples/matrix.claude.yaml for the Claude Code runner; this template is
+# for Codex CLI traffic routed through codex-shim.
 #
 # All model entries are commented out by default. Uncomment the entries you want
 # to include in a run. Keep ports unique across uncommented entries.
 #
-# Boolean `capabilities` below mirror the current codex-shim preset values for
+# Boolean `capabilities` below override the current codex-shim preset values for
 # each profile. Protocol/state policy fields are comments only because changing
-# them can invalidate the provider adapter semantics.
+# them can invalidate the provider adapter semantics; encode those changes in a
+# real codex-shim provider profile instead.
 
 defaults:
   codex_shim_bin: ${CODEX_SHIM_BIN:-codex-shim}

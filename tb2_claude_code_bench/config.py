@@ -27,6 +27,7 @@ class Defaults:
     reasoning_effort: str | None = None
     thinking_display: str | None = "omitted"
     max_thinking_tokens: int | None = None
+    max_output_tokens: int | None = None
     max_turns: int | None = None
     max_budget_usd: str | None = None
     fallback_model: str | None = None
@@ -49,6 +50,7 @@ class ModelEntry:
     reasoning_effort: str | None = None
     thinking_display: str | None = None
     max_thinking_tokens: int | None = None
+    max_output_tokens: int | None = None
     max_turns: int | None = None
     max_budget_usd: str | None = None
     fallback_model: str | None = None
@@ -78,6 +80,9 @@ class ModelEntry:
             import json
 
             env["CLAUDE_CODE_EXTRA_BODY"] = json.dumps(extra_body, separators=(",", ":"), sort_keys=True)
+        max_out = self.max_output_tokens if self.max_output_tokens is not None else defaults.max_output_tokens
+        if max_out is not None:
+            env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = str(max_out)
         return env
 
     def resolved_metadata(self, defaults: Defaults) -> dict[str, Any]:
@@ -91,6 +96,7 @@ class ModelEntry:
             "reasoning_effort": self.reasoning_effort or defaults.reasoning_effort,
             "thinking_display": self.thinking_display or defaults.thinking_display,
             "max_thinking_tokens": self.max_thinking_tokens or defaults.max_thinking_tokens,
+            "max_output_tokens": self.max_output_tokens or defaults.max_output_tokens,
             "max_turns": self.max_turns or defaults.max_turns,
             "allowed_tools": self.allowed_tools or defaults.allowed_tools,
             "disallowed_tools": self.disallowed_tools or defaults.disallowed_tools,
@@ -136,6 +142,7 @@ def load_matrix(path: Path) -> MatrixConfig:
         reasoning_effort=_optional_enum(defaults_raw.get("reasoning_effort"), "defaults.reasoning_effort", REASONING_EFFORT_VALUES),
         thinking_display=_optional_enum(defaults_raw.get("thinking_display", "omitted"), "defaults.thinking_display", THINKING_DISPLAY_VALUES),
         max_thinking_tokens=_optional_positive_int(defaults_raw.get("max_thinking_tokens"), "defaults.max_thinking_tokens"),
+        max_output_tokens=_optional_positive_int(defaults_raw.get("max_output_tokens"), "defaults.max_output_tokens"),
         max_turns=_optional_positive_int(defaults_raw.get("max_turns"), "defaults.max_turns"),
         max_budget_usd=_optional_str(defaults_raw.get("max_budget_usd")),
         fallback_model=_optional_str(defaults_raw.get("fallback_model")),
@@ -174,6 +181,7 @@ def _model_entry(raw: Any, idx: int) -> ModelEntry:
         reasoning_effort=_optional_enum(obj.get("reasoning_effort"), f"models[{idx}].reasoning_effort", REASONING_EFFORT_VALUES),
         thinking_display=_optional_enum(obj.get("thinking_display"), f"models[{idx}].thinking_display", THINKING_DISPLAY_VALUES),
         max_thinking_tokens=_optional_positive_int(obj.get("max_thinking_tokens"), f"models[{idx}].max_thinking_tokens"),
+        max_output_tokens=_optional_positive_int(obj.get("max_output_tokens"), f"models[{idx}].max_output_tokens"),
         max_turns=_optional_positive_int(obj.get("max_turns"), f"models[{idx}].max_turns"),
         max_budget_usd=_optional_str(obj.get("max_budget_usd")),
         fallback_model=_optional_str(obj.get("fallback_model")),

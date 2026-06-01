@@ -9,3 +9,4 @@ generated/
 matrix.yaml
 codex-shim*
 *.[0-9].yaml
+.vscode

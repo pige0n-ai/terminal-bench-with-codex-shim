@@ -58,6 +58,7 @@ def run_harbor(
     _append_agent_kwarg(cmd, "reasoning_effort", model.reasoning_effort or defaults.reasoning_effort)
     _append_agent_kwarg(cmd, "thinking_display", model.thinking_display or defaults.thinking_display)
     _append_agent_kwarg(cmd, "max_thinking_tokens", model.max_thinking_tokens or defaults.max_thinking_tokens)
+    _append_agent_kwarg(cmd, "max_output_tokens", model.max_output_tokens or defaults.max_output_tokens)
     _append_agent_kwarg(cmd, "max_turns", model.max_turns or defaults.max_turns)
     _append_agent_kwarg(cmd, "max_budget_usd", model.max_budget_usd or defaults.max_budget_usd)
     _append_agent_kwarg(cmd, "fallback_model", model.fallback_model or defaults.fallback_model)

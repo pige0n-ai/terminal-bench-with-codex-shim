@@ -4,9 +4,11 @@ import argparse
 import json
 import sys
 import time
+import uuid
 from pathlib import Path
 
 from .config import load_matrix, validate_matrix
+from .docker_cleanup import cleanup_harbor_docker, format_cleanup_summary
 from .harbor import run_harbor
 from .shim import build_runtime, check_docker_reaches_shim, fetch_model_catalog_json, start_shim
 from .summary import write_summary
@@ -100,56 +102,65 @@ def _run_models(
     }
 
     exit_code = 0
-    for model_id in model_ids:
-        model = matrix.model_by_id(model_id)
-        runtime = build_runtime(matrix.defaults, model, run_dir)
-        resolved["models"].append(
-            {
-                "id": model.id,
-                "provider_profile": model.provider_profile,
-                "model_slug": model.model_slug,
-                "port": model.port,
-                "config_path": str(runtime.config_path),
-                "log_path": str(runtime.log_path),
-                "codex_base_url": runtime.base_url_for_codex,
-            }
-        )
-        print(f"starting shim for {model.id} on port {model.port}")
-        shim = start_shim(matrix.defaults, runtime)
-        try:
-            if not skip_docker_health:
-                check_docker_reaches_shim(matrix.defaults.docker_host, model.port)
-            model_catalog_json = fetch_model_catalog_json(runtime)
-            task_groups = [[task] for task in tasks] if tasks else [[]]
-            for task_group in task_groups:
-                task_suffix = f"-{_safe_slug(task_group[0])}" if task_group else "-full"
-                job_name = f"{run_name}-{model.id}{task_suffix}"
-                result = run_harbor(
-                    defaults=matrix.defaults,
-                    model=model,
-                    codex_shim_base_url=runtime.base_url_for_codex,
-                    model_catalog_json=model_catalog_json,
-                    jobs_dir=jobs_root,
-                    job_name=job_name,
-                    tasks=task_group,
-                    repo_root=repo_root,
-                )
-                harbor_log = run_dir / f"harbor-{model.id}{task_suffix}.log"
-                harbor_log.write_text(result.stdout)
-                resolved["harbor_results"].append(
-                    {
-                        "model_id": model.id,
-                        "tasks": task_group,
-                        "return_code": result.return_code,
-                        "command": result.command,
-                        "log_path": str(harbor_log),
-                    }
-                )
-                if result.return_code != 0:
-                    exit_code = 1
-                    print(result.stdout, file=sys.stderr)
-        finally:
-            shim.stop()
+    invocation_id = uuid.uuid4().hex[:8]
+    started_job_names: list[str] = []
+    try:
+        for model_id in model_ids:
+            model = matrix.model_by_id(model_id)
+            runtime = build_runtime(matrix.defaults, model, run_dir)
+            resolved["models"].append(
+                {
+                    "id": model.id,
+                    "provider_profile": model.provider_profile,
+                    "model_slug": model.model_slug,
+                    "port": model.port,
+                    "config_path": str(runtime.config_path),
+                    "log_path": str(runtime.log_path),
+                    "codex_base_url": runtime.base_url_for_codex,
+                }
+            )
+            print(f"starting shim for {model.id} on port {model.port}")
+            shim = start_shim(matrix.defaults, runtime)
+            try:
+                if not skip_docker_health:
+                    check_docker_reaches_shim(matrix.defaults.docker_host, model.port)
+                model_catalog_json = fetch_model_catalog_json(runtime)
+                task_groups = [[task] for task in tasks] if tasks else [[]]
+                for task_group in task_groups:
+                    task_suffix = f"-{_safe_slug(task_group[0])}" if task_group else "-full"
+                    job_name = f"{run_name}-{model.id}{task_suffix}-{invocation_id}"
+                    started_job_names.append(job_name)
+                    result = run_harbor(
+                        defaults=matrix.defaults,
+                        model=model,
+                        codex_shim_base_url=runtime.base_url_for_codex,
+                        model_catalog_json=model_catalog_json,
+                        jobs_dir=jobs_root,
+                        job_name=job_name,
+                        tasks=task_group,
+                        repo_root=repo_root,
+                    )
+                    harbor_log = run_dir / f"harbor-{model.id}{task_suffix}.log"
+                    harbor_log.write_text(result.stdout)
+                    resolved["harbor_results"].append(
+                        {
+                            "model_id": model.id,
+                            "tasks": task_group,
+                            "return_code": result.return_code,
+                            "command": result.command,
+                            "log_path": str(harbor_log),
+                        }
+                    )
+                    if result.return_code != 0:
+                        exit_code = 1
+                        print(result.stdout, file=sys.stderr)
+            finally:
+                shim.stop()
+    finally:
+        cleanup = cleanup_harbor_docker(jobs_root, job_names=started_job_names)
+        print(format_cleanup_summary(cleanup))
+        for error in cleanup.errors:
+            print(f"warning: {error}", file=sys.stderr)
 
     (run_dir / "matrix.resolved.json").write_text(json.dumps(resolved, indent=2, sort_keys=True))
     write_summary(run_dir)
