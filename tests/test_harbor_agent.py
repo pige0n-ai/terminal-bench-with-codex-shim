@@ -70,7 +70,7 @@ def run_setup(tmp_path: Path, *, models_body: str | None = None) -> subprocess.C
     env["CODEX_HOME"] = str(code_home)
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
     return subprocess.run(
-        ["bash", "-lc", command],
+        ["bash", "-c", command],
         env=env,
         text=True,
         stdout=subprocess.PIPE,
@@ -120,7 +120,7 @@ def test_setup_command_loads_nvm_for_node_and_codex(tmp_path: Path):
     (bin_dir / "codex").unlink()
 
     result = subprocess.run(
-        ["bash", "-lc", command],
+        ["bash", "-c", command],
         env=env,
         text=True,
         stdout=subprocess.PIPE,

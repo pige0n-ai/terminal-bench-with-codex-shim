@@ -1,0 +1,32 @@
+# Terminal-Bench matrix for CodeWhale, the maintained upstream successor to
+# the former deepseek-tui line.
+
+defaults:
+  harbor_bin: harbor
+  harbor_dataset: terminal-bench/terminal-bench-2-1
+  harbor_jobs_dir: runs
+  harbor_n_attempts: 1
+  harbor_n_concurrent: 1
+  codewhale_version: 0.8.50
+  node_version: "22"
+  nvm_version: 0.40.2
+  root_packages: [curl, ripgrep]
+  alpine_packages: [curl, bash, nodejs, npm, ripgrep]
+  yolo: true
+  stream_idle_timeout_secs: 300
+  tasks: []
+
+models:
+  - id: deepseek_v4_flash
+    model_slug: deepseek-v4-flash
+    provider: deepseek
+    api_key_env: DEEPSEEK_API_KEY
+    base_url: https://api.deepseek.com/beta
+    thinking: high
+
+  - id: deepseek_v4_pro
+    model_slug: deepseek-v4-pro
+    provider: deepseek
+    api_key_env: DEEPSEEK_API_KEY
+    base_url: https://api.deepseek.com/beta
+    thinking: max

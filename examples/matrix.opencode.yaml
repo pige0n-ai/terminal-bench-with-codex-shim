@@ -1,0 +1,33 @@
+# Terminal-Bench matrix for OpenCode using native provider configuration.
+
+defaults:
+  harbor_bin: harbor
+  harbor_dataset: terminal-bench/terminal-bench-2-1
+  harbor_jobs_dir: runs
+  harbor_n_attempts: 1
+  harbor_n_concurrent: 1
+  opencode_version: 1.15.13
+  node_version: "22"
+  nvm_version: 0.40.2
+  root_packages: [curl, ripgrep]
+  alpine_packages: [curl, bash, nodejs, npm, ripgrep]
+  tasks: []
+
+models:
+  - id: deepseek_v4_flash
+    model_slug: deepseek-v4-flash
+    provider_id: deepseek
+    provider_name: DeepSeek
+    api_key_env: DEEPSEEK_API_KEY
+    base_url: https://api.deepseek.com/v1
+    context_window: 1000000
+    max_output_tokens: 65536
+
+  - id: deepseek_v4_pro
+    model_slug: deepseek-v4-pro
+    provider_id: deepseek
+    provider_name: DeepSeek
+    api_key_env: DEEPSEEK_API_KEY
+    base_url: https://api.deepseek.com/v1
+    context_window: 1000000
+    max_output_tokens: 65536

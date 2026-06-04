@@ -1,11 +1,15 @@
 # Terminal-Bench Harbor Runners
 
-This repository provides two Harbor runners for Terminal-Bench experiments:
+This repository provides Harbor runners for Terminal-Bench experiments:
 
 - `tb2-codex-shim-bench`: runs Codex CLI through `codex-shim`.
 - `tb2-claude-code-bench`: runs Claude Code against Anthropic-compatible APIs.
+- `tb2-opencode-bench`: runs OpenCode through its native provider config.
+- `tb2-reasonix-bench`: runs Reasonix through its native OpenAI-compatible provider config.
+- `tb2-codewhale-bench`: runs CodeWhale, the maintained upstream successor to
+  deepseek-tui, through its native provider env/config surface.
 
-Both runners use matrix YAML files to describe datasets, Harbor concurrency,
+All runners use matrix YAML files to describe datasets, Harbor concurrency,
 task filters, and model-specific settings. They write Harbor job directories,
 resolved matrix metadata, and summary files under `runs/<run-name>/`.
 
@@ -29,6 +33,15 @@ tb2-claude-code-bench
   -> sends Anthropic API traffic to the configured compatible endpoint
 ```
 
+```text
+tb2-opencode-bench / tb2-reasonix-bench / tb2-codewhale-bench
+  -> runs Harbor jobs
+  -> installs exactly one pinned native agent CLI in each task container
+  -> writes agent-specific isolated config/home under the trial agent directory
+  -> runs the native non-interactive command for that agent
+  -> sends traffic through that agent's native provider integration
+```
+
 The Codex runner intentionally does not use Codex `/goal`.
 
 ## Requirements
@@ -38,6 +51,9 @@ The Codex runner intentionally does not use Codex `/goal`.
 - `codex-shim` on `PATH`, or `CODEX_SHIM_BIN` set, for Codex shim runs.
 - Provider API keys exported in the host environment, for example
   `DEEPSEEK_API_KEY`.
+- Node/npm available to install pinned OpenCode, Reasonix, and CodeWhale
+  packages inside Harbor task containers. The runners install Node through nvm
+  on non-Alpine images and use image-provided npm on Alpine images.
 
 Install the Python package:
 
@@ -223,6 +239,124 @@ The runner sets `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
 `CLAUDE_CODE_SUBAGENT_MODEL`, and
 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` for each Harbor invocation.
 
+## OpenCode Runner
+
+Start from the OpenCode example:
+
+```bash
+cp examples/matrix.opencode.yaml matrix.opencode.yaml
+```
+
+Validate and run:
+
+```bash
+tb2-opencode-bench validate --matrix matrix.opencode.yaml --check-env
+tb2-opencode-bench smoke \
+  --matrix matrix.opencode.yaml \
+  --model deepseek_v4_flash \
+  --task terminal-bench/regex-log \
+  --run-name smoke-opencode-regex-log
+tb2-opencode-bench run --matrix matrix.opencode.yaml --run-name opencode-matrix
+```
+
+Important defaults are Harbor settings, `opencode_version` (default
+`1.15.13`), Node/NVM pins, package lists, and `tasks`. Model entries require
+`model_slug`, `provider_id`, `provider_name`, `api_key_env`, and `base_url`;
+`context_window`, `max_output_tokens`, and `extra_env` are optional.
+
+The task container writes an isolated `opencode.json` under the Harbor trial
+agent directory and runs:
+
+```text
+opencode run --model <provider_id>/<model_slug> --format json <instruction>
+```
+
+OpenCode behavior is based on the official
+[CLI](https://opencode.ai/docs/cli/) and
+[provider](https://opencode.ai/docs/providers/) docs.
+
+## Reasonix Runner
+
+Start from the Reasonix example:
+
+```bash
+cp examples/matrix.reasonix.yaml matrix.reasonix.yaml
+```
+
+Validate and run:
+
+```bash
+tb2-reasonix-bench validate --matrix matrix.reasonix.yaml --check-env
+tb2-reasonix-bench smoke \
+  --matrix matrix.reasonix.yaml \
+  --model deepseek_v4_flash \
+  --task terminal-bench/regex-log \
+  --run-name smoke-reasonix-regex-log
+tb2-reasonix-bench run --matrix matrix.reasonix.yaml --run-name reasonix-matrix
+```
+
+Important defaults are Harbor settings, `reasonix_version` (default `1.0.0`),
+Node/NVM pins, package lists, `auto_plan`, `permissions_mode`, and `tasks`.
+Model entries require `model_slug`, `provider_name`, `api_key_env`, and
+`base_url`; `planner_model`, `subagent_model`, `auto_plan`,
+`permissions_mode`, and `extra_env` are optional. Benchmark runs default to
+`permissions_mode: allow` so the agent can run unattended.
+
+The task container writes an isolated `reasonix.toml` under the Harbor trial
+agent directory and runs:
+
+```text
+reasonix run --model <provider_name> <instruction>
+```
+
+Reasonix behavior is based on the upstream
+[Reasonix README](https://github.com/esengine/DeepSeek-Reasonix).
+
+## CodeWhale Runner
+
+CodeWhale is the maintained upstream name for the former deepseek-tui line.
+This repository uses the current `codewhale` command and does not add legacy
+`deepseek` command aliases.
+
+Start from the CodeWhale example:
+
+```bash
+cp examples/matrix.codewhale.yaml matrix.codewhale.yaml
+```
+
+Validate and run:
+
+```bash
+tb2-codewhale-bench validate --matrix matrix.codewhale.yaml --check-env
+tb2-codewhale-bench smoke \
+  --matrix matrix.codewhale.yaml \
+  --model deepseek_v4_flash \
+  --task terminal-bench/regex-log \
+  --run-name smoke-codewhale-regex-log
+tb2-codewhale-bench run --matrix matrix.codewhale.yaml --run-name codewhale-matrix
+```
+
+Important defaults are Harbor settings, `codewhale_version` (default
+`0.8.50`), Node/NVM pins, package lists, `yolo`, `stream_idle_timeout_secs`,
+and `tasks`. Model entries require `model_slug`, `provider`, `api_key_env`, and
+`base_url`; `thinking`, `yolo`, `stream_idle_timeout_secs`, and `extra_env` are
+optional. `yolo` defaults to enabled for unattended Terminal-Bench execution.
+
+The task container uses isolated `HOME`/`CODEWHALE_HOME` paths under the Harbor
+trial agent directory, sets explicit provider env vars, and runs:
+
+```text
+codewhale exec --yolo --auto --output-format stream-json --model <model_slug> <instruction>
+```
+
+Supported `provider` values are explicit and fail fast if unknown:
+`deepseek`, `openai`, `openrouter`, `xiaomi-mimo`, `novita`, `fireworks`,
+`siliconflow`, `arcee`, `moonshot`, `sglang`, `vllm`, `ollama`, `atlascloud`,
+`wanjie-ark`, and `volcengine`.
+
+CodeWhale behavior is based on the upstream
+[CodeWhale README](https://github.com/Hmbown/CodeWhale).
+
 ## Tasks And Attempts
 
 `tasks` entries are passed to Harbor as `--include-task-name`. Leave `tasks` as
@@ -248,7 +382,7 @@ Harbor.
 
 ## Outputs
 
-Both runners write:
+All runners write:
 
 - `runs/<run-name>/jobs/`: raw Harbor job directories.
 - `runs/<run-name>/matrix.resolved.json`: resolved model metadata and Harbor
@@ -257,6 +391,28 @@ Both runners write:
   rollups.
 - `runs/<run-name>/harbor-*.log`: Harbor stdout/stderr for each model/task
   invocation.
+
+### Summary Metrics
+
+All five runners use the same summary schema. Trial rows and model rollups
+include:
+
+- Count/status fields: `n_trials`, `n_passed`, `n_failed`, `n_errored`,
+  `n_cancelled`, `reward`, `exception_type`, `failure_category`.
+- Token fields: `n_input_tokens`, `n_cache_read_tokens`,
+  `n_cache_creation_tokens`, `n_cache_tokens`, `n_output_tokens`,
+  `n_reasoning_tokens`, and `n_total_tokens`.
+- Agent activity fields: `n_requests`, `n_turns`, and `n_tool_calls`.
+- Cost/time fields: `cost_usd`, `wall_time_sec`, `agent_time_sec`, and
+  `verifier_time_sec`.
+
+The summary code only aggregates metrics collected from structured Harbor
+`result.json` fields. It does not infer cross-agent metrics from free-form
+agent logs, because that would make the口径 drift between agents. Missing
+metrics are written as `null`, not treated as zero. Model rollups include
+`metric_counts` so you can see how many trials actually reported each metric.
+If one `result.json` is malformed or missing a metric, summary generation keeps
+going and records an errored trial instead of failing the whole run.
 
 Codex shim runs also write:
 

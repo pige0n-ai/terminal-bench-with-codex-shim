@@ -1,0 +1,29 @@
+# Terminal-Bench matrix for Reasonix using native OpenAI-compatible providers.
+
+defaults:
+  harbor_bin: harbor
+  harbor_dataset: terminal-bench/terminal-bench-2-1
+  harbor_jobs_dir: runs
+  harbor_n_attempts: 1
+  harbor_n_concurrent: 1
+  reasonix_version: 1.0.0
+  node_version: "22"
+  nvm_version: 0.40.2
+  root_packages: [curl, ripgrep]
+  alpine_packages: [curl, bash, nodejs, npm, ripgrep]
+  auto_plan: off
+  permissions_mode: allow
+  tasks: []
+
+models:
+  - id: deepseek_v4_flash
+    model_slug: deepseek-v4-flash
+    provider_name: deepseek-flash
+    api_key_env: DEEPSEEK_API_KEY
+    base_url: https://api.deepseek.com
+
+  - id: deepseek_v4_pro
+    model_slug: deepseek-v4-pro
+    provider_name: deepseek-pro
+    api_key_env: DEEPSEEK_API_KEY
+    base_url: https://api.deepseek.com

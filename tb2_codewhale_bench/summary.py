@@ -151,20 +151,20 @@ def _failure_category(result_path: Path, exception_type: str | None) -> str | No
         return None
     trial_dir = result_path.parent
     text_parts = []
-    for path in [trial_dir / "agent" / "codex.txt", trial_dir / "trial.log"]:
+    for path in [trial_dir / "agent" / "codewhale.txt", trial_dir / "trial.log"]:
         if path.exists():
             text_parts.append(path.read_text(errors="replace"))
     lowered = "\n".join(text_parts).lower()
 
     if "model-catalog-shim.json` as json: eof" in lowered:
-        return "codex_catalog_empty"
+        return "codewhale_catalog_empty"
     if "failed to parse model_catalog_json" in lowered:
-        return "codex_catalog_invalid"
+        return "codewhale_catalog_invalid"
     if "stream disconnected before completion" in lowered:
-        return "shim_stream_failed"
+        return "agent_stream_failed"
     if "response.failed event received" in lowered:
-        return "shim_response_failed"
-    if "command failed" in lowered and "codex exec" not in lowered:
+        return "agent_response_failed"
+    if "command failed" in lowered and "codewhale exec" not in lowered:
         return "setup_failed"
     if exception_type == "AgentTimeoutError":
         return "agent_timeout"
