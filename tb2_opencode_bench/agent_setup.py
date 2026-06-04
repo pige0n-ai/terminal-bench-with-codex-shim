@@ -27,6 +27,11 @@ def config_json(
         "$schema": "https://opencode.ai/config.json",
         "model": f"{provider_id}/{model_slug}",
         "enabled_providers": [provider_id],
+        "permission": {
+            "external_directory": {
+                "/tmp/**": "allow",
+            },
+        },
         "provider": {
             provider_id: {
                 "npm": "@ai-sdk/openai-compatible",

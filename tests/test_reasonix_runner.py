@@ -44,7 +44,7 @@ def test_load_matrix_and_metadata(tmp_path: Path):
     matrix = load_matrix(write_matrix(tmp_path, base_matrix()))
     model = matrix.models[0]
 
-    assert model.reasonix_model() == "deepseek-flash"
+    assert model.reasonix_model() == "deepseek-v4-flash"
     metadata = model.resolved_metadata(matrix.defaults)
     assert metadata["permissions_mode"] == "allow"
     assert "secret-key" not in json.dumps(metadata)
@@ -82,7 +82,7 @@ def test_run_harbor_uses_reasonix_agent_and_hides_secret(monkeypatch, tmp_path: 
     assert result.return_code == 0
     cmd = captured["cmd"]
     assert cmd[cmd.index("--agent-import-path") + 1] == "tb2_reasonix_bench.harbor_agent:PinnedReasonix"
-    assert cmd[cmd.index("--model") + 1] == "deepseek-flash"
+    assert cmd[cmd.index("--model") + 1] == "deepseek-v4-flash"
     assert "reasonix_version=1.0.0" in cmd
     assert "permissions_mode=allow" in cmd
     assert "secret-key" not in " ".join(cmd)

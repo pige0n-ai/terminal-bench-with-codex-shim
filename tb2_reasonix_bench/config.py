@@ -43,7 +43,7 @@ class ModelEntry:
     extra_env: dict[str, str] = field(default_factory=dict)
 
     def reasonix_model(self) -> str:
-        return self.provider_name
+        return self.model_slug
 
     def resolved_auto_plan(self, defaults: Defaults) -> str:
         return self.auto_plan or defaults.auto_plan

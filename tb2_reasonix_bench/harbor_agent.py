@@ -117,7 +117,7 @@ class PinnedReasonix(Codex):
             environment,
             command=(
                 "if [ -s ~/.nvm/nvm.sh ]; then . ~/.nvm/nvm.sh; fi; "
-                f"reasonix run --model {shlex.quote(self.provider_name)} {shlex.quote(instruction)} "
+                f"reasonix run --model {shlex.quote(model_slug)} {shlex.quote(instruction)} "
                 f"2>&1 </dev/null | tee {output_path}"
             ),
             env=env,

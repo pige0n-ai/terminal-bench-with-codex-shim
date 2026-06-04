@@ -116,6 +116,7 @@ def test_opencode_config_json_content():
     )
 
     assert parsed["model"] == "deepseek/deepseek-v4-flash"
+    assert parsed["permission"]["external_directory"] == {"/tmp/**": "allow"}
     provider = parsed["provider"]["deepseek"]
     assert provider["npm"] == "@ai-sdk/openai-compatible"
     assert provider["options"]["apiKey"] == "{env:DEEPSEEK_API_KEY}"
