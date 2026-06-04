@@ -141,8 +141,8 @@ def _trial_metrics(result_path: Path, data: dict[str, Any], agent: dict[str, Any
         "n_total_tokens": total_tokens,
         "cost_usd": _first_number(agent, "cost_usd", "cost", "total_cost_usd"),
         "wall_time_sec": _duration_seconds(data, result_path=result_path),
-        "agent_time_sec": _duration_seconds(agent),
-        "verifier_time_sec": _duration_seconds(verifier),
+        "agent_time_sec": _duration_seconds(agent) or _duration_seconds(data.get("agent_execution") or {}),
+        "verifier_time_sec": _duration_seconds(verifier) or _duration_seconds(data.get("verifier") or {}),
     }
     for key, value in _opencode_output_metrics(result_path).items():
         if value is not None:

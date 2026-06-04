@@ -31,6 +31,8 @@ def test_summarize_completed_trial(tmp_path: Path):
                 },
                 "verifier_result": {"rewards": {"reward": 1.0}, "duration_sec": 1.25},
                 "duration_sec": 12.5,
+                "agent_execution": {"started_at": "2026-06-04T00:00:00Z", "finished_at": "2026-06-04T00:00:03Z"},
+                "verifier": {"started_at": "2026-06-04T00:00:03Z", "finished_at": "2026-06-04T00:00:05Z"},
                 "exception_info": None,
             }
         )
@@ -52,6 +54,30 @@ def test_summarize_completed_trial(tmp_path: Path):
     assert summary["models"][0]["n_cache_creation_tokens"] == 4
     assert summary["models"][0]["n_reasoning_tokens"] == 5
     assert summary["models"][0]["metric_counts"]["n_requests"] == 1
+
+
+def test_summarize_reads_nested_harbor_timing(tmp_path: Path):
+    result_dir = tmp_path / "jobs" / "job-a" / "trial-a"
+    result_dir.mkdir(parents=True)
+    (result_dir / "result.json").write_text(
+        json.dumps(
+            {
+                "task_name": "terminal-bench/example",
+                "trial_name": "trial-a",
+                "agent_info": {"model_info": {"name": "deepseek-v4-pro"}},
+                "agent_result": {},
+                "verifier_result": {"rewards": {"reward": 1.0}},
+                "agent_execution": {"started_at": "2026-06-04T00:00:00Z", "finished_at": "2026-06-04T00:00:03.500000Z"},
+                "verifier": {"started_at": "2026-06-04T00:00:04Z", "finished_at": "2026-06-04T00:00:06Z"},
+                "exception_info": None,
+            }
+        )
+    )
+
+    trial = summarize_run(tmp_path)["trials"][0]
+
+    assert trial["agent_time_sec"] == 3.5
+    assert trial["verifier_time_sec"] == 2.0
 
 
 def test_summarize_classifies_catalog_parse_failures(tmp_path: Path):
