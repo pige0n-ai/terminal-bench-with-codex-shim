@@ -8,6 +8,7 @@ import yaml
 from tb2_reasonix_bench.agent_setup import config_toml
 from tb2_reasonix_bench.config import load_matrix, validate_matrix
 from tb2_reasonix_bench.harbor import run_harbor
+from tb2_reasonix_bench.summary import summarize_run
 
 
 def write_matrix(tmp_path: Path, data: dict) -> Path:
@@ -121,6 +122,48 @@ def test_reasonix_config_toml_content():
     assert 'model = "deepseek-v4-flash"' in text
     assert 'api_key_env = "DEEPSEEK_API_KEY"' in text
     assert 'mode = "allow"' in text
+
+
+def test_summary_reads_reasonix_usage_lines(tmp_path: Path):
+    result_dir = tmp_path / "jobs" / "job-a" / "trial-a"
+    agent_dir = result_dir / "agent"
+    agent_dir.mkdir(parents=True)
+    (result_dir / "result.json").write_text(
+        json.dumps(
+            {
+                "task_name": "build-cython-ext",
+                "trial_name": "trial-a",
+                "agent_info": {"model_info": {"name": "deepseek-v4-flash"}},
+                "agent_result": {},
+                "verifier_result": {"rewards": {"reward": 1.0}},
+            }
+        )
+    )
+    (agent_dir / "reasonix.txt").write_text(
+        "\n".join(
+            [
+                "\x1b[2m  ▎ thinking\x1b[0m",
+                "  · 8434 tok · in 7985 (0 cached / 7985 new) · out 449 (106 reasoning) · ¥0.0089",
+                '  -> bash {"command": "git clone"}',
+                "  · 8514 tok · in 8426 (7936 cached / 490 new) · out 88 (8 reasoning) · ¥0.0008",
+                '  -> read_file {"path": "/app/setup.py"}',
+            ]
+        )
+    )
+
+    trial = summarize_run(tmp_path)["trials"][0]
+
+    assert trial["n_requests"] == 2
+    assert trial["n_turns"] == 2
+    assert trial["n_tool_calls"] == 2
+    assert trial["n_input_tokens"] == 16411
+    assert trial["n_cache_read_tokens"] == 7936
+    assert trial["n_cache_creation_tokens"] == 8475
+    assert trial["n_cache_tokens"] == 7936
+    assert trial["n_output_tokens"] == 537
+    assert trial["n_reasoning_tokens"] == 114
+    assert trial["n_total_tokens"] == 16948
+    assert trial["cost_usd"] == pytest.approx(0.0097)
 
 
 def test_cli_smoke_records_prefixed_job(monkeypatch, tmp_path: Path):

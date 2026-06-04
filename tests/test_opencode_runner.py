@@ -8,6 +8,7 @@ import yaml
 from tb2_opencode_bench.agent_setup import config_json
 from tb2_opencode_bench.config import load_matrix, validate_matrix
 from tb2_opencode_bench.harbor import run_harbor
+from tb2_opencode_bench.summary import summarize_run
 
 
 def write_matrix(tmp_path: Path, data: dict) -> Path:
@@ -116,11 +117,65 @@ def test_opencode_config_json_content():
     )
 
     assert parsed["model"] == "deepseek/deepseek-v4-flash"
-    assert parsed["permission"]["external_directory"] == {"/tmp/**": "allow"}
+    assert parsed["permission"] == "allow"
     provider = parsed["provider"]["deepseek"]
     assert provider["npm"] == "@ai-sdk/openai-compatible"
     assert provider["options"]["apiKey"] == "{env:DEEPSEEK_API_KEY}"
     assert provider["models"]["deepseek-v4-flash"]["limit"] == {"context": 1000000, "output": 65536}
+
+
+def test_summary_reads_opencode_jsonl_usage(tmp_path: Path):
+    result_dir = tmp_path / "jobs" / "job-a" / "trial-a"
+    agent_dir = result_dir / "agent"
+    agent_dir.mkdir(parents=True)
+    (result_dir / "result.json").write_text(
+        json.dumps(
+            {
+                "task_name": "build-cython-ext",
+                "trial_name": "trial-a",
+                "agent_info": {"model_info": {"name": "deepseek/deepseek-v4-flash"}},
+                "agent_result": {},
+                "verifier_result": {"rewards": {"reward": 1.0}},
+            }
+        )
+    )
+    (agent_dir / "opencode.txt").write_text(
+        "\n".join(
+            [
+                json.dumps({"part": {"type": "tool", "tool": "bash"}}),
+                json.dumps(
+                    {
+                        "part": {
+                            "type": "step-finish",
+                            "tokens": {"total": 8259, "input": 14, "output": 193, "reasoning": 116, "cache": {"read": 7936, "write": 0}},
+                            "cost": 0.0001107008,
+                        }
+                    }
+                ),
+                json.dumps(
+                    {
+                        "part": {
+                            "type": "step-finish",
+                            "tokens": {"total": 8557, "input": 493, "output": 120, "reasoning": 8, "cache": {"read": 7936, "write": 0}},
+                            "cost": 0.0001270808,
+                        }
+                    }
+                ),
+            ]
+        )
+    )
+
+    trial = summarize_run(tmp_path)["trials"][0]
+
+    assert trial["n_requests"] == 2
+    assert trial["n_turns"] == 2
+    assert trial["n_tool_calls"] == 1
+    assert trial["n_input_tokens"] == 507
+    assert trial["n_cache_read_tokens"] == 15872
+    assert trial["n_output_tokens"] == 313
+    assert trial["n_reasoning_tokens"] == 124
+    assert trial["n_total_tokens"] == 16816
+    assert trial["cost_usd"] == pytest.approx(0.0002377816)
 
 
 def test_cli_smoke_records_prefixed_job(monkeypatch, tmp_path: Path):

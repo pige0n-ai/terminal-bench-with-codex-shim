@@ -128,7 +128,7 @@ def _trial_metrics(result_path: Path, data: dict[str, Any], agent: dict[str, Any
     if total_tokens is None:
         total_tokens = _sum_optional(input_tokens, output_tokens)
 
-    return {
+    metrics = {
         "n_requests": _first_number(agent, "n_requests", "request_count", "num_requests", "requests"),
         "n_turns": _first_number(agent, "n_turns", "turn_count", "num_turns", "iterations", "n_iterations"),
         "n_tool_calls": _first_number(agent, "n_tool_calls", "tool_call_count", "num_tool_calls"),
@@ -144,6 +144,71 @@ def _trial_metrics(result_path: Path, data: dict[str, Any], agent: dict[str, Any
         "agent_time_sec": _duration_seconds(agent),
         "verifier_time_sec": _duration_seconds(verifier),
     }
+    for key, value in _opencode_output_metrics(result_path).items():
+        if value is not None:
+            metrics[key] = value
+    return metrics
+
+
+def _opencode_output_metrics(result_path: Path) -> dict[str, int | float | None]:
+    output_path = result_path.parent / "agent" / "opencode.txt"
+    if not output_path.exists():
+        return {}
+
+    metrics: dict[str, int | float] = {
+        "n_requests": 0,
+        "n_turns": 0,
+        "n_tool_calls": 0,
+        "n_input_tokens": 0,
+        "n_cache_read_tokens": 0,
+        "n_cache_creation_tokens": 0,
+        "n_cache_tokens": 0,
+        "n_output_tokens": 0,
+        "n_reasoning_tokens": 0,
+        "n_total_tokens": 0,
+        "cost_usd": 0.0,
+    }
+    saw_usage = False
+    saw_tool = False
+    for line in output_path.read_text(errors="replace").splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        part = event.get("part")
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") == "tool":
+            metrics["n_tool_calls"] += 1
+            saw_tool = True
+            continue
+        if part.get("type") != "step-finish":
+            continue
+        tokens = part.get("tokens")
+        if not isinstance(tokens, dict):
+            continue
+        saw_usage = True
+        metrics["n_requests"] += 1
+        metrics["n_turns"] += 1
+        metrics["n_total_tokens"] += _number_or_zero(tokens.get("total"))
+        metrics["n_input_tokens"] += _number_or_zero(tokens.get("input"))
+        metrics["n_output_tokens"] += _number_or_zero(tokens.get("output"))
+        metrics["n_reasoning_tokens"] += _number_or_zero(tokens.get("reasoning"))
+        cache = tokens.get("cache") if isinstance(tokens.get("cache"), dict) else {}
+        cache_read = _number_or_zero(cache.get("read"))
+        cache_write = _number_or_zero(cache.get("write"))
+        metrics["n_cache_read_tokens"] += cache_read
+        metrics["n_cache_creation_tokens"] += cache_write
+        metrics["n_cache_tokens"] += cache_read + cache_write
+        metrics["cost_usd"] += _number_or_zero(part.get("cost"))
+
+    if not saw_usage and not saw_tool:
+        return {}
+    if not saw_usage:
+        return {"n_tool_calls": metrics["n_tool_calls"]}
+    return metrics
 
 
 def _failure_category(result_path: Path, exception_type: str | None) -> str | None:
@@ -258,6 +323,14 @@ def _sum_optional(*values: int | float | None) -> int | float | None:
     if not known:
         return None
     return sum(known)
+
+
+def _number_or_zero(value: Any) -> int | float:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, (int, float)):
+        return value
+    return 0
 
 
 def _duration_seconds(obj: dict[str, Any], *, result_path: Path | None = None) -> int | float | None:

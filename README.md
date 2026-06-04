@@ -265,7 +265,8 @@ Important defaults are Harbor settings, `opencode_version` (default
 `context_window`, `max_output_tokens`, and `extra_env` are optional.
 
 The task container writes an isolated `opencode.json` under the Harbor trial
-agent directory and runs:
+agent directory with `permission: "allow"` for unattended benchmark runs, then
+runs:
 
 ```text
 opencode run --model <provider_id>/<model_slug> --format json <instruction>
@@ -273,7 +274,9 @@ opencode run --model <provider_id>/<model_slug> --format json <instruction>
 
 OpenCode behavior is based on the official
 [CLI](https://opencode.ai/docs/cli/) and
-[provider](https://opencode.ai/docs/providers/) docs.
+[provider](https://opencode.ai/docs/providers/) docs. Permission behavior is
+based on the official
+[permissions](https://opencode.ai/docs/permissions) docs.
 
 ## Reasonix Runner
 
@@ -306,7 +309,7 @@ The task container writes an isolated `reasonix.toml` under the Harbor trial
 agent directory and runs:
 
 ```text
-reasonix run --model <provider_name> <instruction>
+reasonix run --model <model_slug> <instruction>
 ```
 
 Reasonix behavior is based on the upstream
@@ -406,13 +409,14 @@ include:
 - Cost/time fields: `cost_usd`, `wall_time_sec`, `agent_time_sec`, and
   `verifier_time_sec`.
 
-The summary code only aggregates metrics collected from structured Harbor
-`result.json` fields. It does not infer cross-agent metrics from free-form
-agent logs, because that would make the口径 drift between agents. Missing
+The summary code aggregates metrics from structured Harbor `result.json`
+fields. OpenCode and Reasonix also parse their own native agent output files
+(`opencode.txt` JSONL events and `reasonix.txt` usage lines) because those
+agents do not currently populate Harbor `agent_result` usage fields. Missing
 metrics are written as `null`, not treated as zero. Model rollups include
 `metric_counts` so you can see how many trials actually reported each metric.
-If one `result.json` is malformed or missing a metric, summary generation keeps
-going and records an errored trial instead of failing the whole run.
+If one `result.json` or agent output file is malformed or missing a metric,
+summary generation keeps going and records the metrics it can read.
 
 Codex shim runs also write:
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -128,7 +129,7 @@ def _trial_metrics(result_path: Path, data: dict[str, Any], agent: dict[str, Any
     if total_tokens is None:
         total_tokens = _sum_optional(input_tokens, output_tokens)
 
-    return {
+    metrics = {
         "n_requests": _first_number(agent, "n_requests", "request_count", "num_requests", "requests"),
         "n_turns": _first_number(agent, "n_turns", "turn_count", "num_turns", "iterations", "n_iterations"),
         "n_tool_calls": _first_number(agent, "n_tool_calls", "tool_call_count", "num_tool_calls"),
@@ -144,6 +145,70 @@ def _trial_metrics(result_path: Path, data: dict[str, Any], agent: dict[str, Any
         "agent_time_sec": _duration_seconds(agent),
         "verifier_time_sec": _duration_seconds(verifier),
     }
+    for key, value in _reasonix_output_metrics(result_path).items():
+        if value is not None:
+            metrics[key] = value
+    return metrics
+
+
+def _reasonix_output_metrics(result_path: Path) -> dict[str, int | float | None]:
+    output_path = result_path.parent / "agent" / "reasonix.txt"
+    if not output_path.exists():
+        return {}
+
+    metrics: dict[str, int | float] = {
+        "n_requests": 0,
+        "n_turns": 0,
+        "n_tool_calls": 0,
+        "n_input_tokens": 0,
+        "n_cache_read_tokens": 0,
+        "n_cache_creation_tokens": 0,
+        "n_cache_tokens": 0,
+        "n_output_tokens": 0,
+        "n_reasoning_tokens": 0,
+        "n_total_tokens": 0,
+        "cost_usd": 0.0,
+    }
+    token_line = re.compile(
+        r"\b(?P<total>\d+)\s+tok\s+.\s+in\s+(?P<input>\d+)\s+\((?P<cache>\d+)\s+cached\s+/\s+(?P<new>\d+)\s+new\)\s+.\s+out\s+(?P<output>\d+)(?:\s+\((?P<reasoning>\d+)\s+reasoning\))?\s+.\s+.(?P<cost>[0-9]+(?:\.[0-9]+)?)"
+    )
+    saw_usage = False
+    saw_tool = False
+    for raw_line in output_path.read_text(errors="replace").splitlines():
+        line = _strip_ansi(raw_line)
+        if re.match(r"^\s*->\s+", line):
+            metrics["n_tool_calls"] += 1
+            saw_tool = True
+        match = token_line.search(line)
+        if match is None:
+            continue
+        saw_usage = True
+        metrics["n_requests"] += 1
+        metrics["n_turns"] += 1
+        total = int(match.group("total"))
+        input_tokens = int(match.group("input"))
+        cache_tokens = int(match.group("cache"))
+        new_tokens = int(match.group("new"))
+        output_tokens = int(match.group("output"))
+        reasoning_tokens = int(match.group("reasoning") or 0)
+        metrics["n_total_tokens"] += total
+        metrics["n_input_tokens"] += input_tokens
+        metrics["n_cache_read_tokens"] += cache_tokens
+        metrics["n_cache_creation_tokens"] += new_tokens
+        metrics["n_cache_tokens"] += cache_tokens
+        metrics["n_output_tokens"] += output_tokens
+        metrics["n_reasoning_tokens"] += reasoning_tokens
+        metrics["cost_usd"] += float(match.group("cost"))
+
+    if not saw_usage and not saw_tool:
+        return {}
+    if not saw_usage:
+        return {"n_tool_calls": metrics["n_tool_calls"]}
+    return metrics
+
+
+def _strip_ansi(text: str) -> str:
+    return re.sub(r"\x1b\[[0-9;?]*[ -/]*[@-~]", "", text)
 
 
 def _failure_category(result_path: Path, exception_type: str | None) -> str | None:
