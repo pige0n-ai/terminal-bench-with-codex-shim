@@ -410,13 +410,13 @@ include:
   `verifier_time_sec`.
 
 The summary code aggregates metrics from structured Harbor `result.json`
-fields. OpenCode and Reasonix also parse their own native agent output files
-(`opencode.txt` JSONL events and `reasonix.txt` usage lines) because those
-agents do not currently populate Harbor `agent_result` usage fields. Missing
-metrics are written as `null`, not treated as zero. Model rollups include
-`metric_counts` so you can see how many trials actually reported each metric.
-If one `result.json` or agent output file is malformed or missing a metric,
-summary generation keeps going and records the metrics it can read.
+fields. It also parses runner-native artifacts when Harbor leaves comparable
+fields empty: Codex shim SQLite response state, Claude Code stream JSON,
+OpenCode JSONL events, and Reasonix usage lines. Missing metrics are written as
+`null`, not treated as zero. Model rollups include `metric_counts` so you can
+see how many trials actually reported each metric. If one `result.json` or
+agent output file is malformed or missing a metric, summary generation keeps
+going and records the metrics it can read.
 
 Codex shim runs also write:
 

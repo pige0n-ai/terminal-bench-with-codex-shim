@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import csv
 import json
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 
 NUMERIC_METRICS = [
@@ -128,7 +131,7 @@ def _trial_metrics(result_path: Path, data: dict[str, Any], agent: dict[str, Any
     if total_tokens is None:
         total_tokens = _sum_optional(input_tokens, output_tokens)
 
-    return {
+    metrics = {
         "n_requests": _first_number(agent, "n_requests", "request_count", "num_requests", "requests"),
         "n_turns": _first_number(agent, "n_turns", "turn_count", "num_turns", "iterations", "n_iterations"),
         "n_tool_calls": _first_number(agent, "n_tool_calls", "tool_call_count", "num_tool_calls"),
@@ -144,6 +147,142 @@ def _trial_metrics(result_path: Path, data: dict[str, Any], agent: dict[str, Any
         "agent_time_sec": _duration_seconds(agent),
         "verifier_time_sec": _duration_seconds(verifier),
     }
+    for native_metrics in (_codex_shim_metrics(result_path), _claude_code_metrics(result_path)):
+        for key, value in native_metrics.items():
+            if value is not None and metrics.get(key) is None:
+                metrics[key] = value
+    return metrics
+
+
+def _codex_shim_metrics(result_path: Path) -> dict[str, int | float | None]:
+    output_path = result_path.parent / "agent" / "codex.txt"
+    if not output_path.exists():
+        return {}
+    sqlite_path = _codex_shim_sqlite_path(result_path)
+    if sqlite_path is None or not sqlite_path.exists():
+        return _codex_output_metrics(output_path)
+
+    metrics: dict[str, int | float] = {
+        "n_requests": 0,
+        "n_turns": 0,
+        "n_tool_calls": 0,
+        "n_cache_read_tokens": 0,
+        "n_cache_tokens": 0,
+        "n_reasoning_tokens": 0,
+    }
+    connection = None
+    try:
+        connection = sqlite3.connect(sqlite_path)
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute("select response_json from responses order by created_at").fetchall()
+    except sqlite3.Error:
+        return _codex_output_metrics(output_path)
+    finally:
+        if connection is not None:
+            connection.close()
+
+    for row in rows:
+        try:
+            response = json.loads(row["response_json"])
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(response, dict):
+            continue
+        usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
+        input_details = usage.get("input_tokens_details") if isinstance(usage.get("input_tokens_details"), dict) else {}
+        output_details = usage.get("output_tokens_details") if isinstance(usage.get("output_tokens_details"), dict) else {}
+        metrics["n_requests"] += 1
+        metrics["n_turns"] += 1
+        cache_read = _number_or_zero(input_details.get("cached_tokens"))
+        metrics["n_cache_read_tokens"] += cache_read
+        metrics["n_cache_tokens"] += cache_read
+        metrics["n_reasoning_tokens"] += _number_or_zero(output_details.get("reasoning_tokens"))
+        for item in response.get("output") or []:
+            if isinstance(item, dict) and item.get("type") in ("function_call", "custom_tool_call"):
+                metrics["n_tool_calls"] += 1
+    return metrics if metrics["n_requests"] else _codex_output_metrics(output_path)
+
+
+def _codex_output_metrics(output_path: Path) -> dict[str, int | float | None]:
+    metrics = {"n_tool_calls": 0}
+    saw_tool = False
+    for line in output_path.read_text(errors="replace").splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        item = event.get("item") if isinstance(event, dict) else None
+        if isinstance(item, dict) and item.get("type") in ("command_execution", "tool_call") and event.get("type") == "item.started":
+            metrics["n_tool_calls"] += 1
+            saw_tool = True
+    return metrics if saw_tool else {}
+
+
+def _codex_shim_sqlite_path(result_path: Path) -> Path | None:
+    run_dir = _run_dir_for_result(result_path)
+    if run_dir is None:
+        return None
+    generated_dir = run_dir / "generated"
+    for config_path in sorted(generated_dir.glob("*.yaml")):
+        try:
+            data = yaml.safe_load(config_path.read_text())
+        except Exception:
+            continue
+        state = data.get("state") if isinstance(data, dict) else None
+        sqlite_path = state.get("sqlite_path") if isinstance(state, dict) else None
+        if sqlite_path:
+            return Path(sqlite_path)
+    default_state_dir = run_dir.parent / "shim-state" / run_dir.name
+    matches = sorted(default_state_dir.glob("*.sqlite"))
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
+def _claude_code_metrics(result_path: Path) -> dict[str, int | float | None]:
+    output_path = result_path.parent / "agent" / "claude-code.txt"
+    if not output_path.exists():
+        return {}
+
+    assistant_messages: dict[str, dict[str, Any]] = {}
+    tool_call_ids: set[str] = set()
+    result_usage: dict[str, Any] | None = None
+    for line in output_path.read_text(errors="replace").splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        if event.get("type") == "assistant" and isinstance(event.get("message"), dict):
+            message = event["message"]
+            message_id = message.get("id") or event.get("uuid")
+            if message_id:
+                assistant_messages[str(message_id)] = message
+            for content in message.get("content") or []:
+                if isinstance(content, dict) and content.get("type") == "tool_use" and content.get("id"):
+                    tool_call_ids.add(str(content["id"]))
+        elif event.get("type") == "result":
+            usage = event.get("usage") or event.get("total_usage")
+            if isinstance(usage, dict):
+                result_usage = usage
+
+    metrics: dict[str, int | float | None] = {
+        "n_requests": sum(1 for message in assistant_messages.values() if isinstance(message.get("usage"), dict)),
+        "n_turns": sum(1 for message in assistant_messages.values() if isinstance(message.get("usage"), dict)),
+        "n_tool_calls": len(tool_call_ids),
+    }
+    if result_usage is not None:
+        cache_creation = _number_or_zero(result_usage.get("cache_creation_input_tokens"))
+        cache_read = _number_or_zero(result_usage.get("cache_read_input_tokens"))
+        metrics.update(
+            {
+                "n_cache_creation_tokens": cache_creation,
+                "n_cache_read_tokens": cache_read,
+                "n_cache_tokens": cache_creation + cache_read,
+            }
+        )
+    return {key: value for key, value in metrics.items() if value is not None}
 
 
 def _failure_category(result_path: Path, exception_type: str | None) -> str | None:
@@ -258,6 +397,21 @@ def _sum_optional(*values: int | float | None) -> int | float | None:
     if not known:
         return None
     return sum(known)
+
+
+def _number_or_zero(value: Any) -> int | float:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, (int, float)):
+        return value
+    return 0
+
+
+def _run_dir_for_result(result_path: Path) -> Path | None:
+    for parent in result_path.parents:
+        if parent.name == "jobs":
+            return parent.parent
+    return None
 
 
 def _duration_seconds(obj: dict[str, Any], *, result_path: Path | None = None) -> int | float | None:

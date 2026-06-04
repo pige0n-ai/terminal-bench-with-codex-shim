@@ -1,5 +1,8 @@
 import json
+import sqlite3
 from pathlib import Path
+
+import yaml
 
 from tb2_codex_shim_bench.summary import summarize_run
 
@@ -114,3 +117,150 @@ def test_summarize_does_not_fail_on_bad_result_json(tmp_path: Path):
     assert summary["n_trials"] == 1
     assert summary["trials"][0]["status"] == "errored"
     assert summary["trials"][0]["exception_type"] == "summary_read_error:JSONDecodeError"
+
+
+def test_summarize_reads_codex_shim_sqlite_metrics(tmp_path: Path):
+    run_dir = tmp_path / "run-a"
+    result_dir = run_dir / "jobs" / "job-a" / "trial-a"
+    agent_dir = result_dir / "agent"
+    generated_dir = run_dir / "generated"
+    agent_dir.mkdir(parents=True)
+    generated_dir.mkdir(parents=True)
+    sqlite_path = tmp_path / "shim.sqlite"
+    (agent_dir / "codex.txt").write_text('{"type":"turn.completed"}\n')
+    (generated_dir / "deepseek.yaml").write_text(yaml.safe_dump({"state": {"sqlite_path": str(sqlite_path)}}))
+    connection = sqlite3.connect(sqlite_path)
+    connection.execute("create table responses (response_json text, created_at integer)")
+    connection.executemany(
+        "insert into responses values (?, ?)",
+        [
+            (
+                json.dumps(
+                    {
+                        "usage": {
+                            "input_tokens": 100,
+                            "input_tokens_details": {"cached_tokens": 80},
+                            "output_tokens": 10,
+                            "output_tokens_details": {"reasoning_tokens": 3},
+                            "total_tokens": 110,
+                        },
+                        "output": [{"type": "function_call"}, {"type": "reasoning"}],
+                    }
+                ),
+                1,
+            ),
+            (
+                json.dumps(
+                    {
+                        "usage": {
+                            "input_tokens": 90,
+                            "input_tokens_details": {"cached_tokens": 70},
+                            "output_tokens": 5,
+                            "output_tokens_details": {"reasoning_tokens": 2},
+                            "total_tokens": 95,
+                        },
+                        "output": [{"type": "function_call"}],
+                    }
+                ),
+                2,
+            ),
+        ],
+    )
+    connection.commit()
+    connection.close()
+    (result_dir / "result.json").write_text(
+        json.dumps(
+            {
+                "task_name": "terminal-bench/example",
+                "trial_name": "trial-a",
+                "agent_info": {"model_info": {"name": "deepseek-v4-flash"}},
+                "agent_result": {"n_input_tokens": 190, "n_cache_tokens": 150, "n_output_tokens": 15},
+                "verifier_result": {"rewards": {"reward": 1.0}},
+                "exception_info": None,
+            }
+        )
+    )
+
+    trial = summarize_run(run_dir)["trials"][0]
+
+    assert trial["n_requests"] == 2
+    assert trial["n_turns"] == 2
+    assert trial["n_tool_calls"] == 2
+    assert trial["n_cache_read_tokens"] == 150
+    assert trial["n_reasoning_tokens"] == 5
+    assert trial["n_input_tokens"] == 190
+
+
+def test_summarize_reads_claude_code_stream_metrics(tmp_path: Path):
+    result_dir = tmp_path / "jobs" / "job-a" / "trial-a"
+    agent_dir = result_dir / "agent"
+    agent_dir.mkdir(parents=True)
+    (agent_dir / "claude-code.txt").write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "id": "msg-a",
+                            "usage": {"input_tokens": 10, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 100, "output_tokens": 0},
+                            "content": [{"type": "tool_use", "id": "tool-a", "name": "Bash"}],
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "id": "msg-a",
+                            "usage": {"input_tokens": 10, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 100, "output_tokens": 0},
+                            "content": [{"type": "tool_use", "id": "tool-a", "name": "Bash"}],
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "id": "msg-b",
+                            "usage": {"input_tokens": 5, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 200, "output_tokens": 0},
+                            "content": [{"type": "tool_use", "id": "tool-b", "name": "Read"}],
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "usage": {
+                            "input_tokens": 15,
+                            "cache_creation_input_tokens": 7,
+                            "cache_read_input_tokens": 300,
+                            "output_tokens": 11,
+                        },
+                    }
+                ),
+            ]
+        )
+    )
+    (result_dir / "result.json").write_text(
+        json.dumps(
+            {
+                "task_name": "terminal-bench/example",
+                "trial_name": "trial-a",
+                "agent_info": {"model_info": {"name": "deepseek-v4-flash"}},
+                "agent_result": {"n_input_tokens": 315, "n_cache_tokens": 307, "n_output_tokens": 11, "cost_usd": 0.5},
+                "verifier_result": {"rewards": {"reward": 1.0}},
+                "exception_info": None,
+            }
+        )
+    )
+
+    trial = summarize_run(tmp_path)["trials"][0]
+
+    assert trial["n_requests"] == 2
+    assert trial["n_turns"] == 2
+    assert trial["n_tool_calls"] == 2
+    assert trial["n_cache_creation_tokens"] == 7
+    assert trial["n_cache_read_tokens"] == 300
+    assert trial["n_cache_tokens"] == 307
+    assert trial["n_reasoning_tokens"] is None
