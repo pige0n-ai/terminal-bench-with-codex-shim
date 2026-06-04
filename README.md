@@ -411,7 +411,7 @@ include:
 
 The summary code aggregates metrics from structured Harbor `result.json`
 fields. It also parses runner-native artifacts when Harbor leaves comparable
-fields empty: Codex shim SQLite response state, Claude Code stream JSON,
+fields empty: Codex rollout JSONL token-count events, Claude Code stream JSON,
 OpenCode JSONL events, and Reasonix usage lines. Missing metrics are written as
 `null`, not treated as zero. Model rollups include `metric_counts` so you can
 see how many trials actually reported each metric. If one `result.json` or

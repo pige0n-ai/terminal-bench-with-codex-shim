@@ -1,8 +1,5 @@
 import json
-import sqlite3
 from pathlib import Path
-
-import yaml
 
 from tb2_codex_shim_bench.summary import summarize_run
 
@@ -145,55 +142,56 @@ def test_summarize_does_not_fail_on_bad_result_json(tmp_path: Path):
     assert summary["trials"][0]["exception_type"] == "summary_read_error:JSONDecodeError"
 
 
-def test_summarize_reads_codex_shim_sqlite_metrics(tmp_path: Path):
+def test_summarize_reads_codex_rollout_metrics(tmp_path: Path):
     run_dir = tmp_path / "run-a"
     result_dir = run_dir / "jobs" / "job-a" / "trial-a"
     agent_dir = result_dir / "agent"
-    generated_dir = run_dir / "generated"
+    session_dir = agent_dir / "sessions" / "2026" / "06" / "04"
     agent_dir.mkdir(parents=True)
-    generated_dir.mkdir(parents=True)
-    sqlite_path = tmp_path / "shim.sqlite"
+    session_dir.mkdir(parents=True)
     (agent_dir / "codex.txt").write_text('{"type":"turn.completed"}\n')
-    (generated_dir / "deepseek.yaml").write_text(yaml.safe_dump({"state": {"sqlite_path": str(sqlite_path)}}))
-    connection = sqlite3.connect(sqlite_path)
-    connection.execute("create table responses (response_json text, created_at integer)")
-    connection.executemany(
-        "insert into responses values (?, ?)",
-        [
-            (
+    (session_dir / "rollout-2026-06-04T00-00-00.jsonl").write_text(
+        "\n".join(
+            [
                 json.dumps(
                     {
-                        "usage": {
-                            "input_tokens": 100,
-                            "input_tokens_details": {"cached_tokens": 80},
-                            "output_tokens": 10,
-                            "output_tokens_details": {"reasoning_tokens": 3},
-                            "total_tokens": 110,
+                        "type": "event_msg",
+                        "payload": {
+                            "type": "token_count",
+                            "info": {
+                                "last_token_usage": {
+                                    "input_tokens": 100,
+                                    "cached_input_tokens": 80,
+                                    "output_tokens": 10,
+                                    "reasoning_output_tokens": 3,
+                                    "total_tokens": 110,
+                                }
+                            },
                         },
-                        "output": [{"type": "function_call"}, {"type": "reasoning"}],
                     }
                 ),
-                1,
-            ),
-            (
+                json.dumps({"type": "response_item", "payload": {"type": "function_call", "name": "exec_command"}}),
                 json.dumps(
                     {
-                        "usage": {
-                            "input_tokens": 90,
-                            "input_tokens_details": {"cached_tokens": 70},
-                            "output_tokens": 5,
-                            "output_tokens_details": {"reasoning_tokens": 2},
-                            "total_tokens": 95,
+                        "type": "event_msg",
+                        "payload": {
+                            "type": "token_count",
+                            "info": {
+                                "last_token_usage": {
+                                    "input_tokens": 90,
+                                    "cached_input_tokens": 70,
+                                    "output_tokens": 5,
+                                    "reasoning_output_tokens": 2,
+                                    "total_tokens": 95,
+                                }
+                            },
                         },
-                        "output": [{"type": "function_call"}],
                     }
                 ),
-                2,
-            ),
-        ],
+                json.dumps({"type": "response_item", "payload": {"type": "function_call", "name": "exec_command"}}),
+            ]
+        )
     )
-    connection.commit()
-    connection.close()
     (result_dir / "result.json").write_text(
         json.dumps(
             {
