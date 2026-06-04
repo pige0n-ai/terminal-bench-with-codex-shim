@@ -81,6 +81,8 @@ class Defaults:
     state_backend: str = "memory"
     state_sqlite_dir: Path | None = None
     logging_level: str = "info"
+    docker_network_pool_cidr: str | None = None
+    docker_network_subnet_prefix: int | None = None
     tasks: list[str] = field(default_factory=list)
 
 
@@ -160,6 +162,8 @@ def load_matrix(path: Path) -> MatrixConfig:
             "defaults.state_sqlite_dir",
         ),
         logging_level=str(defaults_raw.get("logging_level", "info")),
+        docker_network_pool_cidr=_optional_str(defaults_raw.get("docker_network_pool_cidr")),
+        docker_network_subnet_prefix=_optional_positive_int(defaults_raw.get("docker_network_subnet_prefix"), "defaults.docker_network_subnet_prefix"),
         tasks=_string_list(defaults_raw.get("tasks", []), "defaults.tasks"),
     )
 
@@ -193,6 +197,7 @@ def validate_matrix(matrix: MatrixConfig, *, check_files: bool, check_env: bool)
 
     if check_files and not matrix.defaults.codex_shim_bin.is_file():
         raise ValueError(f"codex-shim binary not found: {matrix.defaults.codex_shim_bin}")
+    _validate_docker_network_pool(matrix.defaults.docker_network_pool_cidr, matrix.defaults.docker_network_subnet_prefix)
 
 
 def _model_entry(raw: Any, idx: int) -> ModelEntry:
@@ -327,6 +332,24 @@ def _optional_str(value: Any) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _validate_docker_network_pool(pool_cidr: str | None, subnet_prefix: int | None) -> None:
+    if pool_cidr is None:
+        if subnet_prefix is not None:
+            raise ValueError("defaults.docker_network_subnet_prefix requires defaults.docker_network_pool_cidr")
+        return
+    import ipaddress
+
+    try:
+        pool = ipaddress.ip_network(pool_cidr)
+    except ValueError as exc:
+        raise ValueError("defaults.docker_network_pool_cidr must be a valid CIDR") from exc
+    prefix = subnet_prefix if subnet_prefix is not None else 24
+    if prefix < pool.prefixlen:
+        raise ValueError("defaults.docker_network_subnet_prefix must be >= docker_network_pool_cidr prefix")
+    if prefix > 30:
+        raise ValueError("defaults.docker_network_subnet_prefix must be <= 30")
 
 
 def _optional_apply_patch_tool_type(value: Any, name: str) -> str | None:

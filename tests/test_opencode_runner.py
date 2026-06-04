@@ -24,6 +24,8 @@ def base_matrix() -> dict:
             "harbor_jobs_dir": "runs",
             "harbor_n_attempts": 2,
             "harbor_n_concurrent": 3,
+            "docker_network_pool_cidr": "10.240.0.0/16",
+            "docker_network_subnet_prefix": 24,
             "opencode_version": "1.15.13",
             "tasks": ["terminal-bench/regex-log"],
         },
@@ -86,6 +88,9 @@ def test_run_harbor_uses_opencode_agent_and_hides_secret(monkeypatch, tmp_path: 
     assert cmd[cmd.index("--include-task-name") + 1] == "regex-log"
     assert "secret-key" not in " ".join(cmd)
     assert captured["env"]["DEEPSEEK_API_KEY"] == "secret-key"
+    assert captured["env"]["TB2_HARBOR_NETWORK_POOL_CIDR"] == "10.240.0.0/16"
+    assert captured["env"]["TB2_HARBOR_NETWORK_SUBNET_PREFIX"] == "24"
+    assert captured["env"]["TB2_HARBOR_NETWORK_REGISTRY"] == str(tmp_path / "docker-network-subnets.json")
 
 
 def test_run_harbor_full_dataset_has_no_task_filter(monkeypatch, tmp_path: Path):

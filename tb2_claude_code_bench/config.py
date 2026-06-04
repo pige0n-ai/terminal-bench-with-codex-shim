@@ -35,6 +35,8 @@ class Defaults:
     disallowed_tools: str | None = None
     extra_body: dict[str, Any] = field(default_factory=dict)
     extra_env: dict[str, str] = field(default_factory=dict)
+    docker_network_pool_cidr: str | None = None
+    docker_network_subnet_prefix: int | None = None
     tasks: list[str] = field(default_factory=list)
 
 
@@ -150,6 +152,8 @@ def load_matrix(path: Path) -> MatrixConfig:
         disallowed_tools=_optional_str(defaults_raw.get("disallowed_tools")),
         extra_body=_optional_mapping(defaults_raw.get("extra_body"), "defaults.extra_body") or {},
         extra_env=_string_mapping(defaults_raw.get("extra_env", {}), "defaults.extra_env"),
+        docker_network_pool_cidr=_optional_str(defaults_raw.get("docker_network_pool_cidr")),
+        docker_network_subnet_prefix=_optional_positive_int(defaults_raw.get("docker_network_subnet_prefix"), "defaults.docker_network_subnet_prefix"),
         tasks=_string_list(defaults_raw.get("tasks", []), "defaults.tasks"),
     )
     models = [_model_entry(item, idx) for idx, item in enumerate(models_raw)]
@@ -166,6 +170,7 @@ def validate_matrix(matrix: MatrixConfig, *, check_env: bool) -> None:
         ids.add(model.id)
         if check_env and model.api_key_env not in os.environ:
             raise ValueError(f"required env var is not set: {model.api_key_env}")
+    _validate_docker_network_pool(matrix.defaults.docker_network_pool_cidr, matrix.defaults.docker_network_subnet_prefix)
 
 
 def _model_entry(raw: Any, idx: int) -> ModelEntry:
@@ -248,6 +253,24 @@ def _optional_positive_int(value: Any, name: str) -> int | None:
     if value is None:
         return None
     return _positive_int(value, name)
+
+
+def _validate_docker_network_pool(pool_cidr: str | None, subnet_prefix: int | None) -> None:
+    if pool_cidr is None:
+        if subnet_prefix is not None:
+            raise ValueError("defaults.docker_network_subnet_prefix requires defaults.docker_network_pool_cidr")
+        return
+    import ipaddress
+
+    try:
+        pool = ipaddress.ip_network(pool_cidr)
+    except ValueError as exc:
+        raise ValueError("defaults.docker_network_pool_cidr must be a valid CIDR") from exc
+    prefix = subnet_prefix if subnet_prefix is not None else 24
+    if prefix < pool.prefixlen:
+        raise ValueError("defaults.docker_network_subnet_prefix must be >= docker_network_pool_cidr prefix")
+    if prefix > 30:
+        raise ValueError("defaults.docker_network_subnet_prefix must be <= 30")
 
 
 def _optional_float_range(value: Any, name: str, minimum: float, maximum: float) -> float | None:

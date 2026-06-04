@@ -33,6 +33,9 @@ include = [
   "tb2_codewhale_bench*",
 ]
 
+[tool.setuptools]
+py-modules = ["sitecustomize", "tb2_harbor_network_patch"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

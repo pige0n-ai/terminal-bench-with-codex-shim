@@ -83,6 +83,15 @@ def test_render_sqlite_state_config_requires_path(tmp_path: Path):
         render_shim_config(matrix.defaults, matrix.models[0])
 
 
+def test_load_matrix_rejects_invalid_docker_network_prefix(tmp_path: Path):
+    data = base_matrix()
+    data["defaults"]["docker_network_pool_cidr"] = "10.240.0.0/24"
+    data["defaults"]["docker_network_subnet_prefix"] = 16
+
+    with pytest.raises(ValueError, match="docker_network_subnet_prefix"):
+        load_matrix(write_matrix(tmp_path, data))
+
+
 def test_build_runtime_writes_sqlite_path_per_run_and_model(tmp_path: Path):
     data = base_matrix()
     data["defaults"]["state_backend"] = "sqlite"

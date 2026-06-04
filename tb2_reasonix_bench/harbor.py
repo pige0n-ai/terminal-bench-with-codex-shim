@@ -73,6 +73,7 @@ def run_harbor(*, defaults: Defaults, model: ModelEntry, jobs_dir: Path, job_nam
     env[model.api_key_env] = api_key
     pythonpath = env.get("PYTHONPATH")
     env["PYTHONPATH"] = str(repo_root) if not pythonpath else f"{repo_root}:{pythonpath}"
+    _apply_docker_network_env(env, defaults, jobs_dir)
     result = subprocess.run(cmd, cwd=repo_root, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     return HarborRunResult(command=cmd, return_code=result.returncode, stdout=result.stdout)
 
@@ -81,3 +82,11 @@ def _append_agent_kwarg(cmd: list[str], key: str, value: object | None) -> None:
     if value is None:
         return
     cmd.extend(["--ak", f"{key}={value}"])
+
+
+def _apply_docker_network_env(env: dict[str, str], defaults: Defaults, jobs_dir: Path) -> None:
+    if defaults.docker_network_pool_cidr is None:
+        return
+    env["TB2_HARBOR_NETWORK_POOL_CIDR"] = defaults.docker_network_pool_cidr
+    env["TB2_HARBOR_NETWORK_SUBNET_PREFIX"] = str(defaults.docker_network_subnet_prefix or 24)
+    env["TB2_HARBOR_NETWORK_REGISTRY"] = str(jobs_dir.parent / "docker-network-subnets.json")

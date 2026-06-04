@@ -116,6 +116,10 @@ Important `defaults` fields:
 - `harbor_dataset`: Harbor dataset name, for example `terminal-bench@2.0`.
 - `harbor_n_attempts`: value passed to Harbor `--n-attempts`.
 - `harbor_n_concurrent`: value passed to Harbor `--n-concurrent`.
+- `docker_network_pool_cidr`, `docker_network_subnet_prefix`: optional
+  explicit Docker bridge subnet allocation for Harbor trials. When set, the
+  runner injects a Docker Compose IPAM override per trial so Docker does not
+  consume its small daemon default address pool.
 - `codex_cli_version`: npm version of `@openai/codex` installed in containers.
 - `node_version`, `nvm_version`, `root_packages`, `alpine_packages`:
   task-container dependency pins.
@@ -277,6 +281,30 @@ OpenCode behavior is based on the official
 [provider](https://opencode.ai/docs/providers/) docs. Permission behavior is
 based on the official
 [permissions](https://opencode.ai/docs/permissions) docs.
+
+## Docker Network Pools
+
+Docker's automatic bridge network address pools can be exhausted by many
+parallel Harbor trials. To avoid restarting Docker or changing daemon-wide
+`default-address-pools`, set an explicit per-run pool in any runner matrix:
+
+```yaml
+defaults:
+  docker_network_pool_cidr: 10.240.0.0/16
+  docker_network_subnet_prefix: 24
+```
+
+`docker_network_pool_cidr` is the large pool to divide. The prefix is the size
+of each trial network. Smaller trial networks produce more networks:
+
+- `10.240.0.0/16` split into `/24` networks gives 256 trial networks.
+- `10.240.0.0/16` split into `/28` networks gives 4096 trial networks.
+- Splitting into `/16` gives one large network, so it reduces concurrency.
+
+Choose a pool that does not overlap the host LAN, existing Docker networks, VPN
+routes, or any networks reachable from containers. The runner keeps a per-run
+`docker-network-subnets.json` allocation registry under the run directory and
+writes a `docker-compose-tb2-network.json` override under each trial directory.
 
 ## Reasonix Runner
 
