@@ -49,6 +49,7 @@ def setup_command(*, config_json_text: str, agent_dir: str, config_dir: str, dat
     quoted_config = shlex.quote(config_json_text)
     return (
         "set -euo pipefail\n"
+        "if [ -s ~/.nvm/nvm.sh ]; then . ~/.nvm/nvm.sh; fi\n"
         f"mkdir -p {shlex.quote(agent_dir)} {shlex.quote(config_dir)} {shlex.quote(data_dir)}\n"
         f"printf %s {quoted_config} > {shlex.quote(config_file)}\n"
         f"cp {shlex.quote(config_file)} {shlex.quote(agent_dir)}/opencode.json\n"

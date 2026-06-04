@@ -45,6 +45,7 @@ def setup_command(*, config_toml_text: str, agent_dir: str, config_dir: str) -> 
     config_file = f"{config_dir.rstrip('/')}/config.toml"
     return (
         "set -euo pipefail\n"
+        "if [ -s ~/.nvm/nvm.sh ]; then . ~/.nvm/nvm.sh; fi\n"
         f"mkdir -p {shlex.quote(agent_dir)} {shlex.quote(config_dir)}\n"
         f"printf %s {shlex.quote(config_toml_text)} > {shlex.quote(config_file)}\n"
         f"cp {shlex.quote(config_file)} {shlex.quote(agent_dir)}/reasonix.toml\n"

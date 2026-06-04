@@ -83,7 +83,7 @@ class PinnedCodeWhale(Codex):
                 f"  nvm install {shlex.quote(self.node_version)} &&"
                 f"  nvm alias default {shlex.quote(self.node_version)} && npm -v &&"
                 f"  npm install -g codewhale{version_spec};"
-                " fi && codewhale --version"
+                " fi && command -v codewhale"
             ),
         )
         await self.exec_as_root(environment, command=_link_bins_command(["node", "npm", "codewhale", "codewhale-tui"]))

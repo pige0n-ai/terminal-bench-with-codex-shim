@@ -35,7 +35,7 @@ def runtime_env(
 def setup_command(*, agent_dir: str, codewhale_home: str) -> str:
     return (
         "set -euo pipefail\n"
+        "if [ -s ~/.nvm/nvm.sh ]; then . ~/.nvm/nvm.sh; fi\n"
         f"mkdir -p {shlex.quote(agent_dir)} {shlex.quote(codewhale_home)}\n"
-        f"codewhale --version > {shlex.quote(agent_dir)}/codewhale-version.txt\n"
-        f"codewhale doctor --json > {shlex.quote(agent_dir)}/codewhale-doctor.json\n"
+        f"command -v codewhale > {shlex.quote(agent_dir)}/codewhale-bin.txt\n"
     )
